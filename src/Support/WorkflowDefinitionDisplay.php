@@ -34,7 +34,7 @@ final class WorkflowDefinitionDisplay
             return $fallbackName;
         }
 
-        return 'â€?;
+        return "\u{2014}";
     }
 
     public function nodeLabel(?string $workflowKey, ?string $nodeKey, ?string $fallbackName = null): string
@@ -56,6 +56,6 @@ final class WorkflowDefinitionDisplay
             return $nodeKey;
         }
 
-        return 'â€?;
+        return "\u{2014}";
     }
 }
