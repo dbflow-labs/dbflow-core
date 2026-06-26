@@ -1,0 +1,63 @@
+{
+  "name": "dbflowlabs/core",
+  "description": "Model-first workflow engine core for Laravel applications.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Baron Wang",
+      "email": "hello@dbflow.dev"
+    }
+  ],
+  "homepage": "https://github.com/dbflow-labs/dbflow-core",
+  "support": {
+    "issues": "https://github.com/dbflow-labs/dbflow-core/issues",
+    "source": "https://github.com/dbflow-labs/dbflow-core"
+  },
+  "autoload": {
+    "psr-4": {
+      "DbflowLabs\\Core\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "DbflowLabs\\Core\\Tests\\": "tests/"
+    }
+  },
+  "require": {
+    "php": "^8.3",
+    "illuminate/auth": "^13.0",
+    "illuminate/contracts": "^13.0",
+    "illuminate/database": "^13.0",
+    "illuminate/support": "^13.0",
+    "symfony/expression-language": "^7.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^11.0",
+    "phpunit/phpunit": "^11.5.50"
+  },
+  "scripts": {
+    "test": "vendor/bin/phpunit"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "DbflowLabs\\Core\\Providers\\DBFlowServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "config": {
+    "audit": {
+      "ignore": {
+        "PKSA-z7t6-zt6p-wtng": "Temporary bypass for symfony/cache advisory to unlock symfony/expression-language ^7.0 for Laravel 13 workflow runtime compatibility."
+      }
+    }
+  },
+  "repositories": [{
+    "name": "packagist",
+    "type": "composer",
+    "url": "https://repo.packagist.org"
+  }]
+}

@@ -1,0 +1,91 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+      - development
+  pull_request:
+    branches:
+      - main
+      - development
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    env:
+      SCAN_PATHS: src/ config/ tests/ README.md
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: sqlite, mbstring, xml, dom, json
+          coverage: none
+          tools: composer
+
+      - name: Ensure ripgrep is available
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          fi
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ matrix.php }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Architecture compliance - DBErp leakage
+        run: |
+          if rg "Dberp|PurchaseRequest|DberpPermissionService|PurchaseRequestStatus" ${{ env.SCAN_PATHS }}; then
+            echo "Forbidden DBErp terms found in package release paths."
+            exit 1
+          fi
+
+      - name: Architecture compliance - stale App\\DBFlow namespace
+        run: |
+          if rg "namespace App\\\\DBFlow|use App\\\\DBFlow|App\\\\\\\\DBFlow" ${{ env.SCAN_PATHS }}; then
+            echo "Stale App\\\\DBFlow namespace found in package release paths."
+            exit 1
+          fi
+
+      - name: Architecture compliance - forbidden brand terms
+        run: |
+          if rg -i "loongdom|DBFlow\\\\Core|dbflow/core" ${{ env.SCAN_PATHS }} composer.json; then
+            echo "Forbidden brand terms found in package release paths."
+            exit 1
+          fi
+
+      - name: Architecture compliance - English-only source
+        run: |
+          if rg -n "[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}\x{F900}-\x{FAFF}]" ${{ env.SCAN_PATHS }}; then
+            echo "Non-English characters found in package release paths."
+            exit 1
+          fi
+
+      - name: Run PHPUnit
+        run: composer test

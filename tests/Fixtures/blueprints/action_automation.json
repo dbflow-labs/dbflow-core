@@ -1,0 +1,83 @@
+{
+  "key": "action_automation",
+  "name": "Action Hook With Conditional Exits",
+  "schema_version": "1.0",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "preprocess",
+      "type": "action",
+      "name": "Preprocess Record",
+      "config": {
+        "action_key": "record_preprocess",
+        "payload": {
+          "channel": "system"
+        }
+      }
+    },
+    {
+      "key": "route",
+      "type": "condition",
+      "name": "Review Route",
+      "config": {
+        "expression": "requires_review == true or requires_review == false"
+      }
+    },
+    {
+      "key": "compliance_review",
+      "type": "approval",
+      "name": "Compliance Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "1"
+        }
+      }
+    },
+    {
+      "key": "end_auto",
+      "type": "end",
+      "name": "Auto Approved",
+      "config": {
+        "status": "approved"
+      }
+    },
+    {
+      "key": "end_manual",
+      "type": "end",
+      "name": "Manually Approved",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "preprocess"
+    },
+    {
+      "from": "preprocess",
+      "to": "route"
+    },
+    {
+      "from": "route",
+      "to": "compliance_review",
+      "condition": "requires_review == true"
+    },
+    {
+      "from": "route",
+      "to": "end_auto",
+      "is_default": true
+    },
+    {
+      "from": "compliance_review",
+      "to": "end_manual"
+    }
+  ]
+}

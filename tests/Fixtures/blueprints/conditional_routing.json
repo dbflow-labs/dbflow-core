@@ -1,0 +1,68 @@
+{
+  "key": "conditional_routing",
+  "name": "Conditional Amount Routing",
+  "schema_version": "1.0",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "amount_gate",
+      "type": "condition",
+      "name": "Amount Gate",
+      "config": {
+        "expression": "amount > 0"
+      }
+    },
+    {
+      "key": "high_value_review",
+      "type": "approval",
+      "name": "High Value Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "1"
+        }
+      }
+    },
+    {
+      "key": "end_fast_track",
+      "type": "end",
+      "name": "Fast Track Complete",
+      "config": {
+        "status": "completed"
+      }
+    },
+    {
+      "key": "end_standard",
+      "type": "end",
+      "name": "Standard Complete",
+      "config": {
+        "status": "completed"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "amount_gate"
+    },
+    {
+      "from": "amount_gate",
+      "to": "high_value_review",
+      "condition": "amount > 10000"
+    },
+    {
+      "from": "amount_gate",
+      "to": "end_fast_track",
+      "is_default": true
+    },
+    {
+      "from": "high_value_review",
+      "to": "end_standard"
+    }
+  ]
+}

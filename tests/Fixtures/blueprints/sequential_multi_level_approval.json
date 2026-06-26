@@ -1,0 +1,59 @@
+{
+  "key": "sequential_multi_level_approval",
+  "name": "Sequential Multi-Level Approval",
+  "schema_version": "1.0",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "manager_approval",
+      "type": "approval",
+      "name": "Manager Sequential Review",
+      "config": {
+        "approval_mode": "sequential",
+        "assignees": {
+          "type": "permission",
+          "value": "sequential_team"
+        }
+      }
+    },
+    {
+      "key": "director_approval",
+      "type": "approval",
+      "name": "Director Final Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "3"
+        }
+      }
+    },
+    {
+      "key": "end_approved",
+      "type": "end",
+      "name": "Approved",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "manager_approval",
+      "is_default": true
+    },
+    {
+      "from": "manager_approval",
+      "to": "director_approval"
+    },
+    {
+      "from": "director_approval",
+      "to": "end_approved"
+    }
+  ]
+}
