@@ -1,5 +1,10 @@
 ﻿# DBFlow Core
 
+[![Tests](https://github.com/dbflow-labs/dbflow-core/actions/workflows/tests.yml/badge.svg)](https://github.com/dbflow-labs/dbflow-core/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/php-8.3%20%7C%208.4-777bb4.svg)](composer.json)
+[![Laravel](https://img.shields.io/badge/laravel-13.x-ff2d20.svg)](composer.json)
+
 **Model-first workflow runtime for Laravel applications.**
 
 DBFlow Core lets you add approval workflows, tasks, transitions, rejection flows, and audit logs to any Eloquent model without building a heavy BPM system from scratch.
