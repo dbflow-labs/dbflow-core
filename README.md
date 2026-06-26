@@ -1,6 +1,7 @@
-﻿# DBFlow Core
+# DBFlow Core
 
 [![Tests](https://github.com/dbflow-labs/dbflow-core/actions/workflows/tests.yml/badge.svg)](https://github.com/dbflow-labs/dbflow-core/actions)
+[![Latest Release](https://img.shields.io/github/v/release/dbflow-labs/dbflow-core?include_prereleases)](https://github.com/dbflow-labs/dbflow-core/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-8.3%20%7C%208.4-777bb4.svg)](composer.json)
 [![Laravel](https://img.shields.io/badge/laravel-13.x-ff2d20.svg)](composer.json)
@@ -11,21 +12,38 @@ DBFlow Core lets you add approval workflows, tasks, transitions, rejection flows
 
 It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific business adapters, Filament UI packages, and the visual workflow Builder are distributed separately.
 
+> [!WARNING]
+> DBFlow Core is currently in alpha. Public APIs and database schema details may change before v1.0.0. Pin exact tags for production experiments.
+
+## Contents
+
+- [Package Overview](#package-overview)
+- [What Core Provides](#what-core-provides)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Laravel Integration](#laravel-integration)
+- [Configuration](#configuration)
+- [Minimal Usage](#minimal-usage)
+- [Package Boundaries](#package-boundaries)
+- [DBFlow Ecosystem](#dbflow-ecosystem)
+- [Development](#development)
+- [Versioning](#versioning)
+- [Support](#support)
+- [License](#license)
+
 ## Package Overview
 
-
-| Item                      | Value                                                                                          |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Package name**          | `dbflowlabs/core`                                                                              |
-| **Namespace**             | `DbflowLabs\Core`                                                                              |
-| **License**               | [MIT](https://chatgpt.com/g/g-p-6a336005778c8191841e2be1fea679a9-dbflowgong-zuo-liu/c/LICENSE) |
-| **Repository**            | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core)               |
-| **Default branch**        | `main`                                                                                         |
-| **Stability**             | `Alpha (v0.1.x)`                                                                               |
-| **Author**                | Baron Wang [hello@dbflow.dev](mailto:hello@dbflow.dev)                                         |
-| **Laravel compatibility** | `13.x`                                                                                         |
-| **PHP requirements**      | `8.3`, `8.4`                                                                                   |
-
+| Item | Value |
+| --- | --- |
+| **Package name** | `dbflowlabs/core` |
+| **Namespace** | `DbflowLabs\Core` |
+| **License** | [MIT](LICENSE) |
+| **Repository** | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core) |
+| **Default branch** | `main` |
+| **Stability** | `Alpha (v0.1.x)` |
+| **Author** | Baron Wang <hello@dbflow.dev> |
+| **Laravel compatibility** | `13.x` |
+| **PHP requirements** | `8.3`, `8.4` |
 
 ## What Core Provides
 
@@ -40,7 +58,7 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 - **Append-only audit logs** — historical workflow activity records for traceability.
 - **Extension points** — assignee resolvers, workflow hooks, condition handling, and action handlers.
 
-> [!NOTE]  
+> [!NOTE]
 > Core focuses entirely on the workflow runtime engine. It contains no frontend assets, Filament resources, visual canvas, or host-specific business models.
 
 ## Requirements
@@ -51,7 +69,7 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 - A host user model, usually `App\Models\User`
 - A `users` table, or equivalent host table, for actor and assignee references
 
-> [!WARNING]  
+> [!WARNING]
 > **Alpha compatibility note:** Actor and assignee database columns currently use unsigned `bigint` foreign keys mapping to `users.id`. Applications using UUID or ULID primary keys for users should plan a compatibility migration or customize their mappings before production deployment.
 
 ## Installation
@@ -143,7 +161,7 @@ return [
     'enabled' => env('DBFLOW_ENABLED', true),
 
     'auth' => [
-        'model' => env('DBFLOW_AUTH_MODEL', 'App\Models\User'),
+        'model' => env('DBFLOW_AUTH_MODEL', 'App\\Models\\User'),
         'guard' => env('DBFLOW_AUTH_GUARD', 'web'),
         'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
     ],
@@ -160,7 +178,7 @@ DBFLOW_AUTH_MODEL=App\Models\User
 
 `ConfigUserResolver` supports integer and string primary keys at runtime.
 
-> [!NOTE]  
+> [!NOTE]
 > `DBFLOW_ENABLED` does not fully disable service provider registration yet during the alpha cycle.
 
 ## Minimal Usage
@@ -240,13 +258,11 @@ Premium or host-specific action handlers can be registered through `ActionManage
 
 DBFlow is designed as a layered ecosystem:
 
-
-| Package                   | Role                                             | License           |
-| ------------------------- | ------------------------------------------------ | ----------------- |
-| `dbflowlabs/core`         | Runtime engine                                   | MIT               |
-| `dbflowlabs/filament`     | Standard Filament UI integration                 | MIT / open-source |
-| `dbflowlabs/filament-pro` | Visual workflow Builder and advanced UI features | Commercial        |
-
+| Package | Role | License |
+| --- | --- | --- |
+| `dbflowlabs/core` | Runtime engine | MIT |
+| `dbflowlabs/filament` | Standard Filament UI integration | MIT / open-source |
+| `dbflowlabs/filament-pro` | Visual workflow Builder and advanced UI features | Commercial |
 
 Core runs the workflow. Filament packages provide user interfaces. Host applications provide business adapters.
 
@@ -256,6 +272,12 @@ Install dependencies:
 
 ```bash
 composer install
+```
+
+Validate the package metadata:
+
+```bash
+composer validate --strict --no-check-lock
 ```
 
 Run the test suite:
@@ -284,8 +306,8 @@ Recommended production usage during alpha:
 For architecture alignment or integration questions, open a GitHub Issue or contact:
 
 - **Email:** [hello@dbflow.dev](mailto:hello@dbflow.dev)
-- **Website:** [dbflow.dev](https://dbflow.dev/)
+- **Website:** [dbflow.dev](https://dbflow.dev)
 
 ## License
 
-DBFlow Core is open-sourced software licensed under the [MIT license](https://chatgpt.com/g/g-p-6a336005778c8191841e2be1fea679a9-dbflowgong-zuo-liu/c/LICENSE).
+DBFlow Core is open-sourced software licensed under the [MIT license](LICENSE).
