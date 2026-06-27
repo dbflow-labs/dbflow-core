@@ -24,6 +24,8 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 - [Laravel Integration](#laravel-integration)
 - [Configuration](#configuration)
 - [Minimal Usage](#minimal-usage)
+- [Assignee Types (Runtime)](#assignee-types-runtime)
+- [Host Integration Checklist](#host-integration-checklist)
 - [Package Boundaries](#package-boundaries)
 - [DBFlow Ecosystem](#dbflow-ecosystem)
 - [Development](#development)
@@ -76,11 +78,11 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 
 ### Packagist Installation
 
-When the package is available on Packagist:
-
 ```bash
-composer require dbflowlabs/core
+composer require dbflowlabs/core:0.1.0-alpha.1
 ```
+
+Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
 
 ### Local Path Repository
 
@@ -150,38 +152,60 @@ php artisan migrate
 
 DBFlow Core creates only `dbflow_*` tables, preserving schema separation from host application tables.
 
-During local package development, migrations may also be loaded directly through Laravel's `loadMigrationsFrom()` behavior.
+During local package development, migrations may also be loaded directly through Laravel's `loadMigrationsFrom()` behavior. **Publishing migrations is optional** — a host application can run `php artisan migrate` without publishing, as long as the package service provider is registered.
 
 ## Configuration
 
-Example `config/dbflow.php`:
+Publish the package config (optional but recommended):
+
+```bash
+php artisan vendor:publish --tag=dbflow-config
+```
+
+The package ships a **framework-neutral** `config/dbflow.php`. It does not hard-code a host user model or guard — set those in your application `.env` (or override the published file in the host).
+
+Package defaults (illustrative — see the published file for the exact source):
 
 ```php
 return [
     'enabled' => env('DBFLOW_ENABLED', true),
-
+    'binding_mode' => env('DBFLOW_BINDING_MODE', 'code'),
     'auth' => [
-        'model' => env('DBFLOW_AUTH_MODEL', 'App\\Models\\User'),
-        'guard' => env('DBFLOW_AUTH_GUARD', 'web'),
+        'model' => env('DBFLOW_AUTH_MODEL'),
+        'guard' => env('DBFLOW_AUTH_GUARD'),
         'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
     ],
-
     'visual_builder_enabled' => env('DBFLOW_VISUAL_BUILDER_ENABLED', false),
 ];
 ```
 
-Set the host user model explicitly:
+**Host example** — typical Laravel app after publish (you may add `env()` fallbacks in *your* copy only):
+
+```php
+'auth' => [
+    'model' => env('DBFLOW_AUTH_MODEL', 'App\\Models\\User'),
+    'guard' => env('DBFLOW_AUTH_GUARD', 'web'),
+    'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
+],
+```
+
+Recommended `.env` for that host example:
 
 ```env
+DBFLOW_ENABLED=true
+DBFLOW_BINDING_MODE=code
 DBFLOW_AUTH_MODEL=App\Models\User
+DBFLOW_AUTH_GUARD=web
 ```
 
 `ConfigUserResolver` supports integer and string primary keys at runtime.
 
-> [!NOTE]
-> `DBFLOW_ENABLED` does not fully disable service provider registration yet during the alpha cycle.
+> [!WARNING]
+> `DBFLOW_ENABLED` does not fully disable Laravel package discovery or `DBFlowServiceProvider` registration yet during the alpha cycle. Host applications that need a hard off-switch should guard their own registration calls (definition providers, assignee resolvers, and sync commands) with `config('dbflow.enabled')`.
 
 ## Minimal Usage
+
+Code-first integration follows four steps: **register → sync → attach model → run**.
 
 ### 1. Register Runtime Definitions
 
@@ -211,9 +235,82 @@ DBFlow::registerWorkflowHooks(
 );
 ```
 
-### 2. Start a Workflow
+A `WorkflowDefinitionProvider` returns a validated array definition (nodes, transitions, approval config). See `DbflowLabs\Core\Contracts\WorkflowDefinitionProvider` and package tests under `tests/Feature/SyncWorkflowDefinitionsTest.php`.
 
-Start a workflow for an Eloquent model:
+### 2. Sync Definitions to the Database
+
+> [!IMPORTANT]
+> Registering a provider alone is **not** enough for `DBFlow::start()`. The runtime resolves an **active published** row from `dbflow_workflow_versions`. After registration, sync code-first definitions into `dbflow_*` tables.
+
+Call `SyncWorkflowDefinitions` from a deploy hook, host Artisan command, or one-time setup task:
+
+```php
+use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
+
+/** @var array{created: list<string>, updated: list<string>, unchanged: list<string>} $summary */
+$summary = app(SyncWorkflowDefinitions::class)->handle();
+```
+
+Core does not ship a first-party `dbflow:sync` Artisan command during alpha. Host applications should expose their own command (for example `app:dbflow-sync-workflows`) that wraps the action above.
+
+Alternative for interactive or UI-owned workflows: `CreateWorkflowDraft` → `PublishWorkflowDraft` (see package actions and Filament packages).
+
+Re-run sync after changing a code-first definition. UI-owned workflows (`source = ui`) are not overwritten as the active version pointer; see `SyncWorkflowDefinitions` source for details.
+
+### 3. Attach Workflows to Host Models
+
+Use the `HasWorkflow` trait on Eloquent models that participate in workflows.
+
+**Recommended for most hosts — implement `Workflowable`** for business key and display metadata used in logs and UI adapters:
+
+```php
+use DbflowLabs\Core\Contracts\Workflowable;
+use DbflowLabs\Core\Traits\HasWorkflow;
+
+final class RefundRequest extends Model implements Workflowable
+{
+    use HasWorkflow;
+
+    public function workflowBusinessKey(): ?string
+    {
+        return $this->reference_no;
+    }
+
+    public function workflowDisplayName(): string
+    {
+        return 'Refund Request';
+    }
+}
+```
+
+**For condition routing — also implement `WorkflowContextInterface`** so condition transitions can read business variables:
+
+```php
+use DbflowLabs\Core\Contracts\WorkflowContextInterface;
+
+public function getWorkflowVariables(): array
+{
+    return [
+        'total_amount' => (float) $this->amount,
+        'supplier_type' => $this->supplier_type,
+    ];
+}
+```
+
+`WorkflowContextInterface` is separate from `Workflowable`. Models that need condition nodes should implement both (or pass `metadata['variables']` when calling `DBFlow::start()`).
+
+When `binding_mode` is `code` (default), start workflows explicitly:
+
+```php
+$instance = $refundRequest->startWorkflow('refund_approval');
+// equivalent to DBFlow::start('refund_approval', $refundRequest, auth()->user());
+```
+
+When `binding_mode` is `ui`, matching published workflows with a `model_type` binding may auto-start on `Model::created`. ERP-style hosts usually keep `code` and trigger from business actions (submit, confirm, etc.).
+
+### 4. Start a Workflow
+
+Start a workflow for an Eloquent model **after** sync has published the definition:
 
 ```php
 use DbflowLabs\Core\DBFlow;
@@ -225,7 +322,7 @@ $instance = DBFlow::start(
 );
 ```
 
-### 3. Approve a Task
+### 5. Approve a Task
 
 Approve a workflow task:
 
@@ -236,6 +333,46 @@ DBFlow::approve(
     'Approved.',
 );
 ```
+
+Reject and cancel entry points are also available on `DbflowLabs\Core\DBFlow` (`reject()`, `cancel()`).
+
+## Assignee Types (Runtime)
+
+Approval nodes declare assignees under `config.assignees`. The schema lists four types; **open-core runtime support differs**:
+
+| `assignees.type` | Supported at runtime (alpha) | Notes |
+| --- | --- | --- |
+| `user` | Yes | Single user id in `value` (string or int). |
+| `callback` | Yes | `callback` (or `value`) must match a key registered via `DBFlow::registerAssigneeResolver()`. |
+| `permission` | Yes* | `value` is a **resolver registry key**, not a framework permission string. Register an `AssigneeResolver` under that same key. |
+| `role` | **No** | Accepted in the schema for forward compatibility, but **rejected by validators** for code sync and unsupported by `AssigneeResolverRegistry`. Use `callback` and resolve roles in the host. |
+
+Examples:
+
+```php
+// Fixed user
+'assignees' => ['type' => 'user', 'value' => '1'],
+
+// Host-registered resolver (roles, departments, dynamic rules)
+'assignees' => ['type' => 'callback', 'callback' => 'finance_team'],
+
+// Resolver key alias (register AssigneeResolver under "approve_refunds")
+'assignees' => ['type' => 'permission', 'value' => 'approve_refunds'],
+```
+
+`WorkflowDefinitionSchema::runtimeSupportedAssigneeTypes()` is the canonical list for code-first definitions.
+
+## Host Integration Checklist
+
+1. `composer require dbflowlabs/core:0.1.0-alpha.1` (or pin the latest alpha tag).
+2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
+3. `php artisan migrate` (migrations load from the package; publishing optional).
+4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
+5. Register `AssigneeResolver`(s) for every `callback` / `permission` key used in definitions.
+6. Run `SyncWorkflowDefinitions` (host Artisan command or deploy hook).
+7. Add `HasWorkflow` (+ `Workflowable` / `WorkflowContextInterface` as needed) to host models.
+8. Call `DBFlow::start()` / `approve()` / `reject()` from host business actions.
+9. Optionally install `dbflowlabs/filament` for admin UI (Core has no UI).
 
 ## Package Boundaries
 
