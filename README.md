@@ -24,7 +24,9 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 - [Laravel Integration](#laravel-integration)
 - [Configuration](#configuration)
 - [Minimal Usage](#minimal-usage)
+- [Runtime API Summary](#runtime-api-summary)
 - [Assignee Types (Runtime)](#assignee-types-runtime)
+- [Host Responsibilities](#host-responsibilities)
 - [Host Integration Checklist](#host-integration-checklist)
 - [Package Boundaries](#package-boundaries)
 - [DBFlow Ecosystem](#dbflow-ecosystem)
@@ -205,7 +207,7 @@ DBFLOW_AUTH_GUARD=web
 
 ## Minimal Usage
 
-Code-first integration follows four steps: **register → sync → attach model → run**.
+Code-first integration: **register → sync → attach model → run → guard host actions**.
 
 ### 1. Register Runtime Definitions
 
@@ -319,12 +321,21 @@ $instance = DBFlow::start(
     'refund_approval',
     $refundRequest,
     auth()->user(),
+    [
+        // Host-defined keys — stored as JSON on dbflow_workflow_instances.metadata
+        'submit_comment' => 'Q2 budget exception',
+        // Used for condition routing when the model does not implement WorkflowContextInterface
+        'variables' => ['priority' => 'high'],
+    ],
 );
 ```
 
-### 5. Approve a Task
+> [!NOTE]
+> **Metadata contract (alpha):** Core persists the entire `$metadata` array on the workflow instance. It does not assign special meaning to keys such as `submit_comment` — naming conventions are **host-defined**. For condition nodes, prefer `WorkflowContextInterface::getWorkflowVariables()`; otherwise pass `metadata['variables']`.
 
-Approve a workflow task:
+### 5. Approve or Reject a Task
+
+Approve a pending task:
 
 ```php
 DBFlow::approve(
@@ -334,7 +345,78 @@ DBFlow::approve(
 );
 ```
 
-Reject and cancel entry points are also available on `DbflowLabs\Core\DBFlow` (`reject()`, `cancel()`).
+Reject a pending task (default strategy returns flow toward the starter):
+
+```php
+use DbflowLabs\Core\Enums\RejectStrategy;
+
+DBFlow::reject(
+    $task,
+    auth()->user(),
+    'Amount exceeds policy.',
+    RejectStrategy::Starter,
+);
+```
+
+### 6. Cancel a Running Workflow
+
+`DBFlow::cancel()` stops a **running** instance — similar in product language to "withdraw", but it is a distinct Core API from approve/reject:
+
+```php
+DBFlow::cancel(
+    $instance,
+    auth()->user(),
+    'Withdrawn by submitter.',
+);
+```
+
+**What Core does:**
+
+- Sets instance status to `cancelled`
+- Cancels pending tasks and assignments
+- Clears `active_key` so the same workflowable may be started again (if the host allows)
+- Writes `WorkflowLogEvent::WorkflowCancelled` and calls `WorkflowHooks::onCancelled`
+
+**What Core does *not* do:**
+
+- **Does not enforce who may cancel.** Core does not check `started_by_user_id` or approver roles. Compare `instance->started_by_user_id` (or your own policy) in the host **before** calling `cancel()`.
+- **Does not define post-cancel business rules.** Whether a cancelled workflow blocks `confirm`, `ship`, `post`, etc. is entirely a **host responsibility** (see [Host Responsibilities](#host-responsibilities)).
+
+| Terminal status | Typical host `canConfirm` strategy (examples only) |
+| --- | --- |
+| `running` | Block until approved or cancelled |
+| `approved` | Allow downstream business action |
+| `rejected` | Block until a new `start()` completes successfully |
+| `cancelled` | Host choice: allow action, require re-submit, or keep blocked |
+
+### 7. Query Workflow State on Models
+
+Models using `HasWorkflow` can inspect runtime state without raw SQL:
+
+```php
+$order->hasRunningWorkflow('refund_approval');
+$order->runningWorkflowInstance('refund_approval');
+$order->completedWorkflowInstance('refund_approval');
+$order->workflowLogs('refund_approval');
+```
+
+Use these helpers in host guards (for example, disable a Filament **Confirm** action while `hasRunningWorkflow()` is true).
+
+## Runtime API Summary
+
+Use `DbflowLabs\Core\DBFlow` as the single runtime entry point during alpha.
+
+| Method | Purpose | Returns |
+| --- | --- | --- |
+| `start($workflowKey, $workflowable, $startedBy = null, $metadata = [])` | Create a running instance | `WorkflowInstance` |
+| `approve($task, $actor = null, $comment = null)` | Approve a pending task | `WorkflowInstance` |
+| `reject($task, $actor = null, $comment = null, $strategy, $targetNodeKey = null)` | Reject a pending task | `WorkflowInstance` |
+| `cancel($instance, $actor = null, $comment = null)` | Cancel a running instance | `WorkflowInstance` |
+| `registerDefinitionProvider($registry, $provider)` | Boot-time code definition registration | `void` |
+| `registerAssigneeResolver($registry, $key, $resolver)` | Boot-time assignee resolver registration | `void` |
+| `registerWorkflowHooks($registry, $workflowKey, $hooks)` | Boot-time lifecycle hooks | `void` |
+
+Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel`) are usually called from host services, controllers, or UI actions.
 
 ## Assignee Types (Runtime)
 
@@ -342,25 +424,72 @@ Approval nodes declare assignees under `config.assignees`. The schema lists four
 
 | `assignees.type` | Supported at runtime (alpha) | Notes |
 | --- | --- | --- |
-| `user` | Yes | Single user id in `value` (string or int). |
+| `user` | Yes | Single user id in `value` (string or int). Fine for demos; use `callback` in production. |
 | `callback` | Yes | `callback` (or `value`) must match a key registered via `DBFlow::registerAssigneeResolver()`. |
-| `permission` | Yes* | `value` is a **resolver registry key**, not a framework permission string. Register an `AssigneeResolver` under that same key. |
-| `role` | **No** | Accepted in the schema for forward compatibility, but **rejected by validators** for code sync and unsupported by `AssigneeResolverRegistry`. Use `callback` and resolve roles in the host. |
+| `permission` (resolver alias) | Yes | `value` is a **resolver registry key**, not a Laravel Gate name or Spatie permission string. |
+| `role` | **No** | Listed in the schema for forward compatibility, but **rejected by validators** during code sync. Use `callback` and resolve roles in the host. |
 
 Examples:
 
 ```php
-// Fixed user
+// Fixed user (demo / tests)
 'assignees' => ['type' => 'user', 'value' => '1'],
 
 // Host-registered resolver (roles, departments, dynamic rules)
 'assignees' => ['type' => 'callback', 'callback' => 'finance_team'],
 
-// Resolver key alias (register AssigneeResolver under "approve_refunds")
+// Resolver key alias — NOT a framework permission string
 'assignees' => ['type' => 'permission', 'value' => 'approve_refunds'],
 ```
 
+```php
+// Register the resolver key used above
+DBFlow::registerAssigneeResolver(
+    app(AssigneeResolverRegistry::class),
+    'approve_refunds',
+    new ApproveRefundsAssigneeResolver(),
+);
+```
+
+Anti-pattern:
+
+```php
+// Does NOT auto-resolve Laravel / Spatie permissions
+'assignees' => ['type' => 'permission', 'value' => 'approve-refunds'],
+```
+
 `WorkflowDefinitionSchema::runtimeSupportedAssigneeTypes()` is the canonical list for code-first definitions.
+
+### Assignee Resolution Prerequisites
+
+Before exposing a **Submit for approval** action in your UI, verify:
+
+1. The workflow is **published** (`SyncWorkflowDefinitions` or `PublishWorkflowDraft`) and `is_enabled`
+2. Every approval node can resolve to **at least one** assignee user id at runtime
+3. Every `callback` / `permission` (resolver alias) key has a matching `AssigneeResolver` registered at boot
+
+If resolution fails or the workflow is missing, `start()` throws (for example `InvalidWorkflowDefinitionException`). Core does **not** fall back to a default approver.
+
+## Host Responsibilities
+
+Core is a runtime engine. The following are **not** provided and must be implemented (or installed via `dbflowlabs/filament`) in the host application:
+
+| Responsibility | Provided by Core? | Typical host implementation |
+| --- | --- | --- |
+| Submit / start UI | No | Filament Action, API endpoint, or service method calling `DBFlow::start()` |
+| Approve / reject UI | No | Task inbox page, or `dbflowlabs/filament` |
+| Withdraw / cancel UI | No | Action calling `DBFlow::cancel()` **after host authorization** |
+| Business action guards | No | Before `confirm` / `post` / `ship`, check `hasRunningWorkflow()` or latest terminal status |
+| Assignee configuration | No | `AssigneeResolver` implementations, deploy-time sync |
+| Coexistence with other approval systems | No | Host config to choose one engine per document type |
+
+**UI options:**
+
+- **Minimal:** two host buttons (submit + cancel) on an edit page — Core only, no extra packages.
+- **Full inbox:** install [`dbflowlabs/filament`](https://github.com/dbflow-labs/dbflow-filament) for standard Filament task UI.
+- **Visual builder:** commercial `dbflowlabs/filament-pro` (see [DBFlow Ecosystem](#dbflow-ecosystem)).
+
+Core does not know about Filament, ERP document types, or plugin mutual-exclusion switches — those remain host concerns.
 
 ## Host Integration Checklist
 
@@ -368,11 +497,12 @@ Examples:
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
-5. Register `AssigneeResolver`(s) for every `callback` / `permission` key used in definitions.
+5. Register `AssigneeResolver`(s) for every `callback` / `permission` (resolver alias) key used in definitions.
 6. Run `SyncWorkflowDefinitions` (host Artisan command or deploy hook).
 7. Add `HasWorkflow` (+ `Workflowable` / `WorkflowContextInterface` as needed) to host models.
-8. Call `DBFlow::start()` / `approve()` / `reject()` from host business actions.
-9. Optionally install `dbflowlabs/filament` for admin UI (Core has no UI).
+8. Implement host UI or services that call `DBFlow::start()` / `approve()` / `reject()` / `cancel()`.
+9. Implement business guards (for example, block `confirm` while a workflow is `running`).
+10. Optionally install `dbflowlabs/filament` for a standard approval inbox instead of building UI from scratch.
 
 ## Package Boundaries
 
@@ -402,6 +532,12 @@ DBFlow is designed as a layered ecosystem:
 | `dbflowlabs/filament-pro` | Visual workflow Builder and advanced UI features | Commercial |
 
 Core runs the workflow. Filament packages provide user interfaces. Host applications provide business adapters.
+
+**Choosing a UI path:**
+
+- Need only **submit / withdraw** on a host edit page? Implement host Filament (or Blade) actions that call `DBFlow::start()` / `cancel()` — Core alone is sufficient.
+- Need a **task inbox**, approval history, and standard admin resources? Add `dbflowlabs/filament`.
+- Need a **visual workflow designer**? Use `dbflowlabs/filament-pro`.
 
 ## Development
 
