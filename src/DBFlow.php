@@ -22,12 +22,14 @@ use DbflowLabs\Core\Actions\CancelWorkflow;
 use DbflowLabs\Core\Actions\RejectTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
 use DbflowLabs\Core\Contracts\AssigneeResolver;
+use DbflowLabs\Core\Contracts\TaskHooks;
 use DbflowLabs\Core\Contracts\WorkflowDefinitionProvider;
 use DbflowLabs\Core\Contracts\WorkflowHooks;
 use DbflowLabs\Core\Enums\RejectStrategy;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Support\DbflowRuntime;
@@ -66,6 +68,14 @@ final class DBFlow
         WorkflowHooks|string $workflowHooks,
     ): void {
         $hooks->register($workflowKey, $workflowHooks);
+    }
+
+    public static function registerTaskHooks(
+        TaskHooksRegistry $hooks,
+        string $workflowKey,
+        TaskHooks|string $taskHooks,
+    ): void {
+        $hooks->register($workflowKey, $taskHooks);
     }
 
     public static function registerAll(

@@ -25,23 +25,29 @@ use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
+use DbflowLabs\Core\Events\TaskCreated;
+use DbflowLabs\Core\Events\TaskRejected;
+use DbflowLabs\Core\Events\WorkflowRejected;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Exceptions\TaskNotPendingException;
 use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowLogger;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ResolvesActorUserId;
+use DbflowLabs\Core\Support\ResolvesTaskHooks;
 use DbflowLabs\Core\Support\ResolvesWorkflowHooks;
 use Illuminate\Support\Facades\DB;
 
 final class RejectTask
 {
     use ResolvesActorUserId;
+    use ResolvesTaskHooks;
     use ResolvesWorkflowHooks;
 
     public function __construct(
@@ -49,6 +55,7 @@ final class RejectTask
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
         private readonly WorkflowLogger $logger,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
+        private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
     ) {}
 
     /**
@@ -97,6 +104,11 @@ final class RejectTask
                 ['strategy' => $strategy->value],
             );
 
+            $instance = $instance->refresh();
+            event(new TaskRejected($lockedTask, $instance, $actor, $comment));
+            $this->taskHooksForInstance($this->taskHooksRegistry, $instance)
+                ->onAfterReject($lockedTask, $instance, $actor);
+
             if ($strategy === RejectStrategy::End) {
                 return $this->terminateWorkflow($instance, $actor, $comment, $strategy);
             }
@@ -131,6 +143,8 @@ final class RejectTask
             );
 
             $this->hooksForInstance($this->hooksRegistry, $instance->refresh())->onRejected($instance->refresh());
+
+            event(new WorkflowRejected($instance->refresh()));
 
             return $instance->refresh();
         });
@@ -242,11 +256,16 @@ final class RejectTask
             ],
         );
 
+        $instance = $instance->refresh();
+        event(new TaskCreated($rollbackTask, $instance));
+        $this->taskHooksForInstance($this->taskHooksRegistry, $instance)
+            ->onTaskCreated($rollbackTask, $instance);
+
         return $rollbackTask;
     }
 
     /**
-     * @param  list<int>  $assigneeUserIds
+     * @param  list<int|string>  $assigneeUserIds
      */
     private function createAssignments(WorkflowTask $task, ApprovalMode $approvalMode, array $assigneeUserIds): void
     {
@@ -283,6 +302,8 @@ final class RejectTask
         );
 
         $this->hooksForInstance($this->hooksRegistry, $instance->refresh())->onRejected($instance->refresh());
+
+        event(new WorkflowRejected($instance->refresh()));
 
         return $instance->refresh();
     }

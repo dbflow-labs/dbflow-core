@@ -23,18 +23,25 @@ use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
 use DbflowLabs\Core\Actions\RejectTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
+use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
+use DbflowLabs\Core\Console\Commands\SyncWorkflowDefinitionsCommand;
+use DbflowLabs\Core\Console\Commands\ValidateWorkflowDefinitionsCommand;
 use DbflowLabs\Core\Contracts\UserResolver;
 use DbflowLabs\Core\DBFlow;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\ExpressionEvaluator;
+use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
 use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionResolver;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowLogger;
+use DbflowLabs\Core\Services\WorkflowNodeTraverser;
 use DbflowLabs\Core\Support\ActionManager;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ConfigUserResolver;
 use DbflowLabs\Core\Support\DbflowRuntime;
+use DbflowLabs\Core\Validation\WorkflowDefinitionValidator;
 use Illuminate\Support\ServiceProvider;
 
 final class DBFlowServiceProvider extends ServiceProvider
@@ -64,6 +71,11 @@ final class DBFlowServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
 
         if ($this->app->runningInConsole()) {
+            $this->commands([
+                SyncWorkflowDefinitionsCommand::class,
+                ValidateWorkflowDefinitionsCommand::class,
+            ]);
+
             $this->publishes([
                 __DIR__.'/../../config/dbflow.php' => config_path('dbflow.php'),
             ], 'dbflow-config');
@@ -114,6 +126,34 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
+            TaskHooksRegistry::class,
+            fn ($app): TaskHooksRegistry => new TaskHooksRegistry($app),
+        );
+
+        $this->app->singleton(
+            ExpressionEvaluator::class,
+            static fn (): ExpressionEvaluator => new ExpressionEvaluator,
+        );
+
+        $this->app->singleton(
+            TransitionResolver::class,
+            fn ($app): TransitionResolver => new TransitionResolver($app->make(ExpressionEvaluator::class)),
+        );
+
+        $this->app->singleton(
+            WorkflowDefinitionValidator::class,
+            static fn (): WorkflowDefinitionValidator => new WorkflowDefinitionValidator,
+        );
+
+        $this->app->singleton(
+            SyncWorkflowDefinitions::class,
+            fn ($app): SyncWorkflowDefinitions => new SyncWorkflowDefinitions(
+                $app->make(WorkflowDefinitionRegistry::class),
+                $app->make(WorkflowDefinitionValidator::class),
+            ),
+        );
+
+        $this->app->singleton(
             ActionManager::class,
             fn ($app): ActionManager => new ActionManager($app),
         );
@@ -126,14 +166,24 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
+            WorkflowNodeTraverser::class,
+            fn ($app): WorkflowNodeTraverser => new WorkflowNodeTraverser(
+                $app->make(TransitionResolver::class),
+                $app->make(ActionManager::class),
+                $app->make(WorkflowLogger::class),
+            ),
+        );
+
+        $this->app->singleton(
             StartWorkflow::class,
             fn ($app): StartWorkflow => new StartWorkflow(
                 $app->make(WorkflowDefinitionResolver::class),
                 $app->make(TransitionResolver::class),
-                $app->make(ActionManager::class),
+                $app->make(WorkflowNodeTraverser::class),
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
+                $app->make(TaskHooksRegistry::class),
             ),
         );
 
@@ -141,10 +191,11 @@ final class DBFlowServiceProvider extends ServiceProvider
             ApproveTask::class,
             fn ($app): ApproveTask => new ApproveTask(
                 $app->make(TransitionResolver::class),
-                $app->make(ActionManager::class),
+                $app->make(WorkflowNodeTraverser::class),
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
+                $app->make(TaskHooksRegistry::class),
             ),
         );
 
@@ -155,6 +206,7 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
+                $app->make(TaskHooksRegistry::class),
             ),
         );
 

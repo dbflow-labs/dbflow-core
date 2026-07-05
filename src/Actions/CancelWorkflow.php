@@ -21,6 +21,7 @@ use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
+use DbflowLabs\Core\Events\WorkflowCancelled;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
@@ -92,6 +93,8 @@ final class CancelWorkflow
             );
 
             $this->hooksForInstance($this->hooksRegistry, $lockedInstance->refresh())->onCancelled($lockedInstance->refresh());
+
+            event(new WorkflowCancelled($lockedInstance->refresh()));
 
             return $lockedInstance->refresh();
         });
