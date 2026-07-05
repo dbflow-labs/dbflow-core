@@ -83,35 +83,6 @@ composer require dbflowlabs/core:0.3.0-alpha.1
 
 Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
 
-### Local Path Repository
-
-For local development, add a Composer path repository inside your host application's `composer.json`:
-
-```json
-{
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../dbflow-core",
-      "options": {
-        "symlink": true
-      }
-    }
-  ],
-  "minimum-stability": "dev",
-  "prefer-stable": true,
-  "require": {
-    "dbflowlabs/core": "*@dev"
-  }
-}
-```
-
-Then install the package:
-
-```bash
-composer require dbflowlabs/core:*@dev
-```
-
 Releases are tagged on GitHub, for example:
 
 ```text
