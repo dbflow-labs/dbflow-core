@@ -19,6 +19,8 @@ namespace DbflowLabs\Core\Support;
 
 final class WorkflowDefinitionDiffBuilder
 {
+    private const TRANSITION_KEY_SEPARATOR = '->';
+
     /**
      * @param  array<string, mixed>  $from
      * @param  array<string, mixed>  $to
@@ -77,17 +79,14 @@ final class WorkflowDefinitionDiffBuilder
         $changed = [];
         $unchanged = [];
 
-        // Added: in $to but not $from
         foreach (array_diff($toKeys, $fromKeys) as $key) {
             $added[] = $toMap[$key];
         }
 
-        // Removed: in $from but not $to
         foreach (array_diff($fromKeys, $toKeys) as $key) {
             $removed[] = $fromMap[$key];
         }
 
-        // Changed / Unchanged: key exists in both
         foreach (array_intersect($fromKeys, $toKeys) as $key) {
             $normalizedFrom = $this->normalizeNode($fromMap[$key]);
             $normalizedTo = $this->normalizeNode($toMap[$key]);
@@ -129,23 +128,20 @@ final class WorkflowDefinitionDiffBuilder
         $changed = [];
         $unchanged = [];
 
-        // Added: in $to but not $from
         foreach (array_diff($toKeys, $fromKeys) as $key) {
             $added[] = $toMap[$key];
         }
 
-        // Removed: in $from but not $to
         foreach (array_diff($fromKeys, $toKeys) as $key) {
             $removed[] = $fromMap[$key];
         }
 
-        // Changed / Unchanged: key exists in both
         foreach (array_intersect($fromKeys, $toKeys) as $key) {
             $normalizedFrom = $this->normalizeTransition($fromMap[$key]);
             $normalizedTo = $this->normalizeTransition($toMap[$key]);
 
             if ($normalizedFrom !== $normalizedTo) {
-                $parts = explode('â†?, $key);
+                $parts = explode(self::TRANSITION_KEY_SEPARATOR, $key);
 
                 $changed[] = [
                     'from' => $parts[0] ?? '',
@@ -211,7 +207,7 @@ final class WorkflowDefinitionDiffBuilder
                 continue;
             }
 
-            $key = "{$from}â†’{$to}";
+            $key = $from.self::TRANSITION_KEY_SEPARATOR.$to;
             $map[$key] = $transition;
         }
 

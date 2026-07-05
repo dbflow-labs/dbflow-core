@@ -34,16 +34,60 @@ use DbflowLabs\Core\Services\WorkflowLogger;
 use DbflowLabs\Core\Support\ActionManager;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ConfigUserResolver;
+use DbflowLabs\Core\Support\DbflowRuntime;
 use Illuminate\Support\ServiceProvider;
 
 final class DBFlowServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $existingDbflowConfig = $this->app->make('config')->get('dbflow');
+        $preMergeEnabled = is_array($existingDbflowConfig) && array_key_exists('enabled', $existingDbflowConfig)
+            ? $existingDbflowConfig['enabled']
+            : null;
+
         $this->mergeConfigFrom(__DIR__.'/../../config/dbflow.php', 'dbflow');
 
-        // Hosts may override the default user resolver via config('dbflow.auth.resolver')
-        // to support UUID/ULID primary keys or custom authentication stacks.
+        if ($preMergeEnabled !== null) {
+            $this->app['config']->set('dbflow.enabled', $preMergeEnabled);
+        }
+    }
+
+    public function boot(): void
+    {
+        if (! DbflowRuntime::isEnabled()) {
+            return;
+        }
+
+        $this->registerContainerBindings();
+
+        $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
+
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../../config/dbflow.php' => config_path('dbflow.php'),
+            ], 'dbflow-config');
+
+            $this->publishes([
+                __DIR__.'/../../database/migrations' => database_path('migrations'),
+            ], 'dbflow-migrations');
+        }
+
+        DBFlow::registerAll(
+            $this->app->make(WorkflowDefinitionRegistry::class),
+            $this->app->make(AssigneeResolverRegistry::class),
+            $this->app->make(WorkflowHooksRegistry::class),
+        );
+
+        $this->registerCoreActionHandlers();
+    }
+
+    private function registerContainerBindings(): void
+    {
+        if ($this->app->bound(StartWorkflow::class)) {
+            return;
+        }
+
         $this->app->singleton(UserResolver::class, function (): UserResolver {
             $resolverClass = config('dbflow.auth.resolver', ConfigUserResolver::class);
 
@@ -74,7 +118,6 @@ final class DBFlowServiceProvider extends ServiceProvider
             fn ($app): ActionManager => new ActionManager($app),
         );
 
-        // ApprovalNodeAssigneeResolver depends on the global AssigneeResolverRegistry singleton.
         $this->app->singleton(
             ApprovalNodeAssigneeResolver::class,
             fn ($app): ApprovalNodeAssigneeResolver => new ApprovalNodeAssigneeResolver(
@@ -122,29 +165,6 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(WorkflowHooksRegistry::class),
             ),
         );
-    }
-
-    public function boot(): void
-    {
-        $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
-
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__.'/../../config/dbflow.php' => config_path('dbflow.php'),
-            ], 'dbflow-config');
-
-            $this->publishes([
-                __DIR__.'/../../database/migrations' => database_path('migrations'),
-            ], 'dbflow-migrations');
-        }
-
-        DBFlow::registerAll(
-            $this->app->make(WorkflowDefinitionRegistry::class),
-            $this->app->make(AssigneeResolverRegistry::class),
-            $this->app->make(WorkflowHooksRegistry::class),
-        );
-
-        $this->registerCoreActionHandlers();
     }
 
     private function registerCoreActionHandlers(): void

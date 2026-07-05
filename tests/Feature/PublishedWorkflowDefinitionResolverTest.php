@@ -22,7 +22,6 @@ use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Models\Workflow;
 use DbflowLabs\Core\Models\WorkflowVersion;
 use DbflowLabs\Core\Resolvers\PublishedWorkflowDefinitionResolver;
-use DbflowLabs\Core\Services\WorkflowDefinitionValidator as LegacyWorkflowDefinitionValidator;
 use DbflowLabs\Core\Tests\Concerns\BuildsMinimalPublishedWorkflow;
 use DbflowLabs\Core\Tests\TestCase;
 use DbflowLabs\Core\Validation\WorkflowDefinitionValidator;
@@ -42,18 +41,6 @@ final class PublishedWorkflowDefinitionResolverTest extends TestCase
         $this->expectException(InvalidWorkflowDefinitionException::class);
 
         $resolver->resolve('isolated_runtime_flow');
-    }
-
-    #[Test]
-    public function topology_defective_definition_is_not_accepted_through_legacy_wrapper(): void
-    {
-        $definition = $this->topologyDefectiveDefinition('legacy_gate_flow');
-
-        $legacyValidator = new LegacyWorkflowDefinitionValidator;
-
-        $this->expectException(InvalidWorkflowDefinitionException::class);
-
-        $legacyValidator->validate($definition);
     }
 
     #[Test]

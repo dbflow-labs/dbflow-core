@@ -202,8 +202,8 @@ DBFLOW_AUTH_GUARD=web
 
 `ConfigUserResolver` supports integer and string primary keys at runtime.
 
-> [!WARNING]
-> `DBFLOW_ENABLED` does not fully disable Laravel package discovery or `DBFlowServiceProvider` registration yet during the alpha cycle. Host applications that need a hard off-switch should guard their own registration calls (definition providers, assignee resolvers, and sync commands) with `config('dbflow.enabled')`.
+> [!NOTE]
+> Set `DBFLOW_ENABLED=false` to disable the workflow runtime. When disabled, `DBFlowServiceProvider` skips service bindings and migrations, and `DBFlow::start()` / `approve()` / `reject()` / `cancel()` throw `WorkflowNotAvailableException`. Registration helpers (`registerDefinitionProvider`, etc.) remain available so hosts can prepare definitions before re-enabling.
 
 ## Minimal Usage
 

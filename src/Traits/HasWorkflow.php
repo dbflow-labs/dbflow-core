@@ -23,6 +23,7 @@ use DbflowLabs\Core\Models\Workflow;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowLog;
 use DbflowLabs\Core\Support\DbflowAuth;
+use DbflowLabs\Core\Support\DbflowRuntime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -31,7 +32,7 @@ trait HasWorkflow
 {
     protected static function bootHasWorkflow(): void
     {
-        if (config('dbflow.binding_mode') !== 'ui') {
+        if (! DbflowRuntime::isEnabled() || config('dbflow.binding_mode') !== 'ui') {
             return;
         }
 

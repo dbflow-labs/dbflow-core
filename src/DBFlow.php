@@ -30,6 +30,7 @@ use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
+use DbflowLabs\Core\Support\DbflowRuntime;
 use Illuminate\Database\Eloquent\Model;
 
 final class DBFlow
@@ -90,6 +91,8 @@ final class DBFlow
         mixed $startedBy = null,
         array $metadata = [],
     ): WorkflowInstance {
+        DbflowRuntime::ensureEnabled();
+
         return app(StartWorkflow::class)->handle($workflowKey, $workflowable, $startedBy, $metadata);
     }
 
@@ -101,6 +104,8 @@ final class DBFlow
         mixed $actor = null,
         ?string $comment = null,
     ): WorkflowInstance {
+        DbflowRuntime::ensureEnabled();
+
         return app(ApproveTask::class)->handle($task, $actor, $comment);
     }
 
@@ -116,6 +121,8 @@ final class DBFlow
         RejectStrategy $strategy = RejectStrategy::Starter,
         ?string $targetNodeKey = null,
     ): WorkflowInstance {
+        DbflowRuntime::ensureEnabled();
+
         return app(RejectTask::class)->handle($task, $actor, $comment, $strategy, $targetNodeKey);
     }
 
@@ -127,6 +134,8 @@ final class DBFlow
         mixed $actor = null,
         ?string $comment = null,
     ): WorkflowInstance {
+        DbflowRuntime::ensureEnabled();
+
         return app(CancelWorkflow::class)->handle($instance, $actor, $comment);
     }
 }

@@ -1,10 +1,10 @@
 /vendor/
+/build/
 .phpunit.result.cache
 .phpunit.cache/
 .idea/
 .vscode/
 .env
 .env.*
-composer.lock
 .php-cs-fixer.dist.php
 /docs/

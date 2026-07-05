@@ -42,7 +42,7 @@ final class ExpressionEvaluator
 
     public function __construct()
     {
-        // No providers passed â€?ensures no extra functions are injected, reducing sandbox attack surface.
+        // No providers passed - ensures no extra functions are injected, reducing sandbox attack surface.
         $this->expressionLanguage = new ExpressionLanguage;
     }
 

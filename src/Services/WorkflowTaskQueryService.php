@@ -36,11 +36,11 @@ final class WorkflowTaskQueryService
      * Returns a paginated list of pending workflow task assignments for the given user.
      *
      * Executes only two SQL queries (assignments plus eager loads).
-     * Each record includes the full workflowTask â†?workflowInstance â†?workflow chain,
+     * Each record includes the full workflowTask -> workflowInstance -> workflow chain,
      * allowing O(1) access to deep relations without extra queries.
      *
      * @param  int  $perPage  Items per page; default 10, recommended maximum 50
-     * @return LengthAwarePaginator<WorkflowTaskAssignment>
+     * @return LengthAwarePaginator<int, WorkflowTaskAssignment>
      */
     public function getPendingTasksForUser(int $userId, int $perPage = 10): LengthAwarePaginator
     {

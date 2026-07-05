@@ -1,0 +1,23 @@
+parameters:
+    level: 4
+    paths:
+        - src
+    tmpDir: build/phpstan
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+
+    ignoreErrors:
+        - '#Access to an undefined property DbflowLabs\\Core\\Models\\#'
+        - '#Trait DbflowLabs\\Core\\Traits\\HasWorkflow is used zero times#'
+        - '#belongsTo\(\) expects class-string<Illuminate\\Database\\Eloquent\\Model>, class-string<Illuminate\\Contracts\\Auth\\Authenticatable> given#'
+        - '#ConfigUserResolver::modelClass\(\) should return class-string<Illuminate\\Contracts\\Auth\\Authenticatable> but returns string#'
+        - '#Generic type Illuminate\\Contracts\\Pagination\\LengthAwarePaginator#'
+        - '#WorkflowTaskQueryService::getPendingTasksForUser\(\) should return#'
+        - '#Workflow::versions\(\) should return#'
+        - '#Workflow::activeVersion\(\) should return#'
+        - '#Match expression does not handle remaining value: mixed#'
+        - '#Strict comparison using === between mixed#'
+        - '#Cannot call method .* on stdClass#'
+        - '#normalizeAssociativeArray\(\) should return#'
+        - '#Call to function is_array\(\) with array\{x\?: mixed, y\?: mixed\} will always evaluate to true#'
+        - '#generics.notSubtype#'
