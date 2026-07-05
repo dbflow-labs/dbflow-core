@@ -19,8 +19,6 @@ namespace DbflowLabs\Core\Actions;
 
 use DbflowLabs\Core\Contracts\WorkflowContextInterface;
 use DbflowLabs\Core\Definitions\Blueprint;
-use DbflowLabs\Core\Definitions\Contracts\WorkflowNodeInterface;
-use DbflowLabs\Core\Definitions\Nodes\ActionNode;
 use DbflowLabs\Core\Definitions\Nodes\ApprovalNode;
 use DbflowLabs\Core\Definitions\Nodes\EndNode;
 use DbflowLabs\Core\Enums\ApprovalMode;
@@ -28,19 +26,23 @@ use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
+use DbflowLabs\Core\Events\TaskApproved;
+use DbflowLabs\Core\Events\TaskCreated;
+use DbflowLabs\Core\Events\WorkflowCompleted;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
-use DbflowLabs\Core\Exceptions\PremiumFeatureMissingException;
 use DbflowLabs\Core\Exceptions\TaskNotPendingException;
 use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
-use DbflowLabs\Core\Support\ActionManager;
+use DbflowLabs\Core\Services\WorkflowNodeTraverser;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowLogger;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ResolvesActorUserId;
+use DbflowLabs\Core\Support\ResolvesTaskHooks;
 use DbflowLabs\Core\Support\ResolvesWorkflowHooks;
 use DbflowLabs\Core\Support\WorkflowCompletionStatus;
 use Illuminate\Support\Facades\DB;
@@ -48,16 +50,16 @@ use Illuminate\Support\Facades\DB;
 final class ApproveTask
 {
     use ResolvesActorUserId;
+    use ResolvesTaskHooks;
     use ResolvesWorkflowHooks;
-
-    private const MAX_ACTION_DEPTH = 20;
 
     public function __construct(
         private readonly TransitionResolver $transitionResolver,
-        private readonly ActionManager $actionManager,
+        private readonly WorkflowNodeTraverser $nodeTraverser,
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
         private readonly WorkflowLogger $logger,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
+        private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
     ) {}
 
     public function handle(WorkflowTask $task, mixed $actor = null, ?string $comment = null): WorkflowInstance
@@ -101,6 +103,11 @@ final class ApproveTask
                 $actor,
                 $comment,
             );
+
+            $instance = $instance->refresh();
+            event(new TaskApproved($lockedTask, $instance, $actor, $comment));
+            $this->taskHooksForInstance($this->taskHooksRegistry, $instance)
+                ->onAfterApprove($lockedTask, $instance, $actor);
 
             return $this->advanceWorkflow($instance, $lockedTask, $actor);
         });
@@ -184,117 +191,25 @@ final class ApproveTask
             return $instance->refresh();
         }
 
-        $result = $this->processNextNode($instance, $blueprint, $nextNode, $variables, $actor, 0);
+        $result = $this->nodeTraverser->traverse(
+            $instance,
+            $blueprint,
+            $nextNode,
+            $variables,
+            $actor,
+            function (WorkflowInstance $i, ApprovalNode $n, mixed $a): void {
+                $this->createNextApprovalTask($i, $n, $a);
+            },
+            function (WorkflowInstance $i, EndNode $n, mixed $a): void {
+                $this->markCompleted($i, $n, $a);
+            },
+        );
 
         if ($result === 'completed') {
             $this->dispatchCompletionHooks($instance->refresh());
         }
 
         return $instance->refresh();
-    }
-
-    /**
-     * @param  array<string, mixed>  $variables
-     */
-    private function processNextNode(
-        WorkflowInstance $instance,
-        Blueprint $blueprint,
-        WorkflowNodeInterface $node,
-        array $variables,
-        mixed $actor,
-        int $depth,
-    ): string {
-        if ($depth > self::MAX_ACTION_DEPTH) {
-            throw new InvalidWorkflowDefinitionException(
-                'Workflow definition has consecutive action nodes exceeding the maximum depth of '.self::MAX_ACTION_DEPTH.'.',
-            );
-        }
-
-        if ($node instanceof EndNode) {
-            $this->markCompleted($instance, $node, $actor);
-
-            return 'completed';
-        }
-
-        if ($node instanceof ActionNode) {
-            $this->executeActionNode($instance, $node, $actor);
-
-            $nextNode = $this->transitionResolver->nextNode(
-                $blueprint,
-                $node->key(),
-                'approve',
-                $variables,
-            );
-
-            if ($nextNode === null) {
-                throw new InvalidWorkflowDefinitionException(
-                    "Action node [{$node->key()}] has no outgoing transition in workflow definition.",
-                );
-            }
-
-            return $this->processNextNode($instance, $blueprint, $nextNode, $variables, $actor, $depth + 1);
-        }
-
-        if ($node instanceof ApprovalNode) {
-            $this->createNextApprovalTask($instance, $node, $actor);
-
-            return 'pending';
-        }
-
-        throw new InvalidWorkflowDefinitionException(
-            "Unsupported next node type [{$node->type()->value}] in workflow definition.",
-        );
-    }
-
-    private function executeActionNode(WorkflowInstance $instance, ActionNode $node, mixed $actor): void
-    {
-        $nodeKey = $node->key();
-        $actionKey = $node->actionKey();
-
-        $instance->forceFill(['current_node_key' => $nodeKey])->save();
-
-        if ($actionKey === '') {
-            $this->logger->log(
-                $instance,
-                WorkflowLogEvent::ActionExecuted,
-                actor: $actor,
-                payload: ['node_key' => $nodeKey, 'skipped' => true, 'reason' => 'no_action_key'],
-            );
-
-            return;
-        }
-
-        if (! $this->actionManager->has($actionKey)) {
-            throw new PremiumFeatureMissingException($actionKey, $nodeKey);
-        }
-
-        $handler = $this->actionManager->resolve($actionKey);
-
-        if ($handler === null) {
-            throw new PremiumFeatureMissingException($actionKey, $nodeKey);
-        }
-
-        try {
-            $handler->execute($node, $instance);
-
-            $this->logger->log(
-                $instance,
-                WorkflowLogEvent::ActionExecuted,
-                actor: $actor,
-                payload: ['node_key' => $nodeKey, 'action_key' => $actionKey],
-            );
-        } catch (\Throwable $e) {
-            $this->logger->log(
-                $instance,
-                WorkflowLogEvent::ActionFailed,
-                actor: $actor,
-                payload: [
-                    'node_key' => $nodeKey,
-                    'action_key' => $actionKey,
-                    'error' => $e->getMessage(),
-                ],
-            );
-        }
     }
 
     private function markCompleted(WorkflowInstance $instance, ?EndNode $endNode, mixed $actor): void
@@ -307,6 +222,8 @@ final class ApproveTask
         ])->save();
 
         $this->logger->log($instance, WorkflowLogEvent::WorkflowCompleted, actor: $actor);
+
+        event(new WorkflowCompleted($instance->refresh()));
     }
 
     private function dispatchCompletionHooks(WorkflowInstance $instance): void
@@ -350,11 +267,16 @@ final class ApproveTask
             ],
         );
 
+        $instance = $instance->refresh();
+        event(new TaskCreated($task, $instance));
+        $this->taskHooksForInstance($this->taskHooksRegistry, $instance)
+            ->onTaskCreated($task, $instance);
+
         return $task;
     }
 
     /**
-     * @param  list<int>  $assigneeUserIds
+     * @param  list<int|string>  $assigneeUserIds
      */
     private function createAssignments(WorkflowTask $task, ApprovalMode $approvalMode, array $assigneeUserIds): void
     {
