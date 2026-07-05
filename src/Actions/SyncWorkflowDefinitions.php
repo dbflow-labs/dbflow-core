@@ -35,7 +35,7 @@ final class SyncWorkflowDefinitions
     /**
      * @return array{created: list<string>, updated: list<string>, unchanged: list<string>}
      */
-    public function handle(): array
+    public function handle(?string $workflowKey = null, bool $dryRun = false): array
     {
         $summary = [
             'created' => [],
@@ -43,9 +43,14 @@ final class SyncWorkflowDefinitions
             'unchanged' => [],
         ];
 
-        DB::transaction(function () use (&$summary): void {
+        $callback = function () use (&$summary, $workflowKey, $dryRun): void {
             foreach ($this->registry->providers() as $provider) {
                 $providerKey = $provider->key();
+
+                if ($workflowKey !== null && $providerKey !== $workflowKey) {
+                    continue;
+                }
+
                 $definition = $provider->definition();
 
                 if (($definition['key'] ?? null) !== $providerKey) {
@@ -66,6 +71,34 @@ final class SyncWorkflowDefinitions
                     'description' => $definition['description'] ?? null,
                     'is_enabled' => (bool) ($definition['enabled'] ?? true),
                 ];
+
+                if ($dryRun) {
+                    $activeVersion = $workflow === null
+                        ? null
+                        : WorkflowVersion::query()
+                            ->where('workflow_id', $workflow->getKey())
+                            ->where('is_active', true)
+                            ->first();
+
+                    $definitionChanged = $activeVersion === null
+                        || ! $this->definitionsAreEquivalent($activeVersion->definition ?? [], $normalizedDefinition);
+
+                    $workflowMetadataChanged = $workflow !== null && (
+                        $workflow->name !== $workflowAttributes['name']
+                        || $workflow->description !== $workflowAttributes['description']
+                        || (bool) $workflow->is_enabled !== $workflowAttributes['is_enabled']
+                    );
+
+                    if ($wasCreated) {
+                        $summary['created'][] = $providerKey;
+                    } elseif ($definitionChanged || $workflowMetadataChanged) {
+                        $summary['updated'][] = $providerKey;
+                    } else {
+                        $summary['unchanged'][] = $providerKey;
+                    }
+
+                    continue;
+                }
 
                 if ($wasCreated) {
                     $workflow = Workflow::query()->create([
@@ -105,8 +138,6 @@ final class SyncWorkflowDefinitions
                         'published_at' => now(),
                     ]);
 
-                    // NOTE: UI-owned workflows are managed by manual configuration; code sync does not overwrite their primary version pointer.
-                    // New versions are stored as history only; current_version_id is not switched to the code version.
                     if ($workflow->source !== 'ui') {
                         $workflow->forceFill([
                             'current_version_id' => $newVersion->getKey(),
@@ -123,7 +154,15 @@ final class SyncWorkflowDefinitions
                     $summary['unchanged'][] = $providerKey;
                 }
             }
-        });
+        };
+
+        if ($dryRun) {
+            $callback();
+
+            return $summary;
+        }
+
+        DB::transaction($callback);
 
         return $summary;
     }
