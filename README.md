@@ -44,7 +44,7 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 | **License** | [MIT](LICENSE) |
 | **Repository** | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core) |
 | **Default branch** | `main` |
-| **Stability** | `Alpha (v0.2.x)` |
+| **Stability** | `Alpha (v0.3.x)` |
 | **Author** | Baron Wang <hello@dbflow.dev> |
 | **Laravel compatibility** | `13.x` |
 | **PHP requirements** | `8.3`, `8.4` |
@@ -71,17 +71,14 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 - Laravel `13.x` / Illuminate `^13.0` components
 - SQLite, MySQL, or PostgreSQL
 - A host user model, usually `App\Models\User`
-- A `users` table, or equivalent host table, for actor and assignee references
-
-> [!WARNING]
-> **Alpha compatibility note:** Actor and assignee database columns currently use unsigned `bigint` foreign keys mapping to `users.id`. Applications using UUID or ULID primary keys for users should plan a compatibility migration or customize their mappings before production deployment.
+- A user table (or equivalent) for actor and assignee references; UUID/ULID primary keys are supported in v0.3+
 
 ## Installation
 
 ### Packagist Installation
 
 ```bash
-composer require dbflowlabs/core:0.2.0-alpha.1
+composer require dbflowlabs/core:0.3.0-alpha.1
 ```
 
 Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
@@ -118,7 +115,7 @@ composer require dbflowlabs/core:*@dev
 Releases are tagged on GitHub, for example:
 
 ```text
-v0.2.0-alpha.1
+v0.3.0-alpha.1
 ```
 
 ## Laravel Integration
@@ -197,10 +194,13 @@ Recommended `.env` for that host example:
 DBFLOW_ENABLED=true
 DBFLOW_BINDING_MODE=code
 DBFLOW_AUTH_MODEL=App\Models\User
+DBFLOW_AUTH_MODEL=App\\Models\\User
+DBFLOW_AUTH_TABLE=users
 DBFLOW_AUTH_GUARD=web
+DBFLOW_EXPRESSION_STRICT=false
 ```
 
-`ConfigUserResolver` supports integer and string primary keys at runtime.
+`ConfigUserResolver` supports integer and string primary keys at runtime. User references are stored as strings in `dbflow_*` tables.
 
 > [!NOTE]
 > Set `DBFLOW_ENABLED=false` to disable the workflow runtime. When disabled, `DBFlowServiceProvider` skips service bindings and migrations, and `DBFlow::start()` / `approve()` / `reject()` / `cancel()` throw `WorkflowNotAvailableException`. Registration helpers (`registerDefinitionProvider`, etc.) remain available so hosts can prepare definitions before re-enabling.
@@ -244,7 +244,15 @@ A `WorkflowDefinitionProvider` returns a validated array definition (nodes, tran
 > [!IMPORTANT]
 > Registering a provider alone is **not** enough for `DBFlow::start()`. The runtime resolves an **active published** row from `dbflow_workflow_versions`. After registration, sync code-first definitions into `dbflow_*` tables.
 
-Call `SyncWorkflowDefinitions` from a deploy hook, host Artisan command, or one-time setup task:
+Call `SyncWorkflowDefinitions` from a deploy hook, or use the official Artisan command:
+
+```bash
+php artisan dbflow:sync
+php artisan dbflow:sync --dry-run
+php artisan dbflow:sync --workflow=refund_approval
+```
+
+Programmatic alternative:
 
 ```php
 use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
@@ -253,7 +261,11 @@ use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
 $summary = app(SyncWorkflowDefinitions::class)->handle();
 ```
 
-Core does not ship a first-party `dbflow:sync` Artisan command during alpha. Host applications should expose their own command (for example `app:dbflow-sync-workflows`) that wraps the action above.
+Validate definitions in CI:
+
+```bash
+php artisan dbflow:validate --strict
+```
 
 Alternative for interactive or UI-owned workflows: `CreateWorkflowDraft` → `PublishWorkflowDraft` (see package actions and Filament packages).
 
@@ -415,6 +427,7 @@ Use `DbflowLabs\Core\DBFlow` as the single runtime entry point during alpha.
 | `registerDefinitionProvider($registry, $provider)` | Boot-time code definition registration | `void` |
 | `registerAssigneeResolver($registry, $key, $resolver)` | Boot-time assignee resolver registration | `void` |
 | `registerWorkflowHooks($registry, $workflowKey, $hooks)` | Boot-time lifecycle hooks | `void` |
+| `registerTaskHooks($registry, $workflowKey, $hooks)` | Boot-time task-level hooks | `void` |
 
 Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel`) are usually called from host services, controllers, or UI actions.
 
@@ -493,12 +506,12 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:0.2.0-alpha.1` (or pin the latest alpha tag).
+1. `composer require dbflowlabs/core:0.3.0-alpha.1` (or pin the latest alpha tag).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
 5. Register `AssigneeResolver`(s) for every `callback` / `permission` (resolver alias) key used in definitions.
-6. Run `SyncWorkflowDefinitions` (host Artisan command or deploy hook).
+6. Run `php artisan dbflow:sync` (or call `SyncWorkflowDefinitions` from a deploy hook).
 7. Add `HasWorkflow` (+ `Workflowable` / `WorkflowContextInterface` as needed) to host models.
 8. Implement host UI or services that call `DBFlow::start()` / `approve()` / `reject()` / `cancel()`.
 9. Implement business guards (for example, block `confirm` while a workflow is `running`).
@@ -569,7 +582,7 @@ Until a stable `1.0.0` release is reached, public APIs and schema definitions ma
 
 Recommended production usage during alpha:
 
-- Pin exact tags, such as `v0.2.0-alpha.1`
+- Pin exact tags, such as `v0.3.0-alpha.1`
 - Review release notes before upgrading
 - Test workflow definitions and runtime transitions in a staging environment
 - Avoid relying on undocumented internal classes
