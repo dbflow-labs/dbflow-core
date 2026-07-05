@@ -33,7 +33,7 @@ final class SaveWorkflowDraft
     public function handle(
         Workflow $workflow,
         array $definition,
-        ?int $updatedBy = null,
+        int|string|null $updatedBy = null,
     ): Workflow {
         return DB::transaction(function () use ($workflow, $definition, $updatedBy): Workflow {
             // Draft save uses non-strict mode, allowing empty assignees.value fields (warnings only)

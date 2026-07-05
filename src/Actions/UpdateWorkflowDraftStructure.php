@@ -34,7 +34,7 @@ final class UpdateWorkflowDraftStructure
     public function handle(
         Workflow $workflow,
         array $definition,
-        ?int $updatedBy = null,
+        int|string|null $updatedBy = null,
     ): Workflow {
         $normalized = $this->normalize($definition, $workflow);
 

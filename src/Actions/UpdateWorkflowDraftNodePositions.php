@@ -32,7 +32,7 @@ final class UpdateWorkflowDraftNodePositions
     public function handle(
         Workflow $workflow,
         array $positions,
-        ?int $updatedBy = null,
+        int|string|null $updatedBy = null,
     ): Workflow {
         $definition = $this->resolveSeedDefinition($workflow);
         $definition = $this->applyPositions($definition, $positions);

@@ -32,7 +32,7 @@ final class CreateWorkflowDraft
      */
     public function handle(
         array $definition,
-        ?int $createdBy = null,
+        int|string|null $createdBy = null,
     ): Workflow {
         return DB::transaction(function () use ($definition, $createdBy): Workflow {
             $validationResult = $this->validator->validate($definition);

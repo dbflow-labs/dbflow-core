@@ -32,7 +32,7 @@ final class PublishWorkflowDraft
 
     public function handle(
         Workflow $workflow,
-        ?int $publishedBy = null,
+        int|string|null $publishedBy = null,
     ): WorkflowVersion {
         return DB::transaction(function () use ($workflow, $publishedBy): WorkflowVersion {
             if (! $workflow->hasDraft()) {

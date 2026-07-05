@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\DB;
 
 final class EnableWorkflow
 {
-    public function handle(Workflow $workflow, ?int $updatedBy = null): Workflow
+    public function handle(Workflow $workflow, int|string|null $updatedBy = null): Workflow
     {
         return DB::transaction(function () use ($workflow, $updatedBy): Workflow {
             $workflow = Workflow::query()->whereKey($workflow->getKey())->lockForUpdate()->firstOrFail();

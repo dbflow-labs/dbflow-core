@@ -35,7 +35,7 @@ final class CreateWorkflowFromTemplate
         string $templateKey,
         string $workflowKey,
         string $workflowName,
-        ?int $createdBy = null,
+        int|string|null $createdBy = null,
     ): Workflow {
         $template = $this->templateRegistry->find($templateKey);
 

@@ -35,7 +35,7 @@ final class CopyWorkflow
         Workflow $source,
         string $newKey,
         string $newName,
-        ?int $createdBy = null,
+        int|string|null $createdBy = null,
     ): Workflow {
         $this->assertValidNewKey($newKey);
 
