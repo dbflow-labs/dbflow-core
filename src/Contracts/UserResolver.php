@@ -34,6 +34,11 @@ interface UserResolver
     public function modelClass(): string;
 
     /**
+     * Returns the configured host user table name.
+     */
+    public function table(): string;
+
+    /**
      * Find a user by primary key; returns null when not found.
      */
     public function find(mixed $id): ?Authenticatable;

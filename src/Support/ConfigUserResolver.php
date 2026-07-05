@@ -53,6 +53,21 @@ final class ConfigUserResolver implements UserResolver
         return 'App\\Models\\User';
     }
 
+    public function table(): string
+    {
+        /** @var string|null $configured */
+        $configured = config('dbflow.auth.table');
+
+        if (is_string($configured) && $configured !== '') {
+            return $configured;
+        }
+
+        /** @var Model $model */
+        $model = new ($this->modelClass());
+
+        return $model->getTable();
+    }
+
     public function find(mixed $id): ?Authenticatable
     {
         if ($id === null || $id === '' || $id === 0) {

@@ -47,7 +47,7 @@ class WorkflowLog extends Model
             'workflow_instance_id' => 'integer',
             'workflow_task_id' => 'integer',
             'event' => WorkflowLogEvent::class,
-            'actor_user_id' => 'integer',
+            'actor_user_id' => 'string',
             'payload' => 'array',
             'created_at' => 'datetime',
         ];

@@ -41,7 +41,7 @@ class WorkflowTaskAssignment extends Model
     {
         return [
             'workflow_task_id' => 'integer',
-            'assignee_user_id' => 'integer',
+            'assignee_user_id' => 'string',
             'status' => WorkflowTaskAssignmentStatus::class,
             'sequence' => 'integer',
             'acted_at' => 'datetime',

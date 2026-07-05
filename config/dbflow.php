@@ -20,7 +20,13 @@ return [
     'auth' => [
         'model' => env('DBFLOW_AUTH_MODEL'),
         'guard' => env('DBFLOW_AUTH_GUARD'),
+        'table' => env('DBFLOW_AUTH_TABLE'),
+        'connection' => env('DBFLOW_AUTH_CONNECTION'),
         'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
+    ],
+
+    'expression' => [
+        'strict' => env('DBFLOW_EXPRESSION_STRICT', false),
     ],
 
     'visual_builder_enabled' => env('DBFLOW_VISUAL_BUILDER_ENABLED', false),

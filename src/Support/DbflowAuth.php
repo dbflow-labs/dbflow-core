@@ -37,6 +37,14 @@ final class DbflowAuth
     }
 
     /**
+     * Returns the configured host user table name, inferred from the model when not set explicitly.
+     */
+    public static function userTable(): string
+    {
+        return app(UserResolver::class)->table();
+    }
+
+    /**
      * Find a user by primary key; returns null when not found.
      * Accepts int, string, or null; returns null for null, zero, or empty string.
      */

@@ -53,7 +53,7 @@ class WorkflowInstance extends Model
         return [
             'workflow_id' => 'integer',
             'workflow_version_id' => 'integer',
-            'started_by_user_id' => 'integer',
+            'started_by_user_id' => 'string',
             'status' => WorkflowInstanceStatus::class,
             'metadata' => 'array',
             'started_at' => 'datetime',

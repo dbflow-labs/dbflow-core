@@ -55,7 +55,7 @@ class Workflow extends Model
             'draft_validation_errors' => 'array',
             'draft_validation_warnings' => 'array',
             'draft_updated_at' => 'datetime',
-            'draft_updated_by' => 'integer',
+            'draft_updated_by' => 'string',
             'current_version_id' => 'integer',
             'status' => WorkflowStatus::class,
         ];

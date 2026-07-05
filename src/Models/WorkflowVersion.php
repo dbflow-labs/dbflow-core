@@ -45,7 +45,7 @@ class WorkflowVersion extends Model
             'definition' => 'array',
             'is_active' => 'boolean',
             'published_at' => 'datetime',
-            'published_by' => 'integer',
+            'published_by' => 'string',
         ];
     }
 
