@@ -17,6 +17,7 @@ declare(strict_types=1);
 
 namespace DbflowLabs\Core\Services;
 
+use DbflowLabs\Core\Exceptions\ExpressionEvaluationException;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
 use Throwable;
 
@@ -64,10 +65,40 @@ final class ExpressionEvaluator
             $result = $this->expressionLanguage->evaluate($expression, $variables);
 
             return (bool) $result;
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            if ($this->isStrict()) {
+                throw new ExpressionEvaluationException(
+                    'Failed to evaluate workflow condition expression: '.$e->getMessage(),
+                    $expression,
+                    $e,
+                );
+            }
+
             // Syntax errors, undefined variables, type mismatches, etc. degrade to false
             // to avoid workflow definition flaws blocking the entire business process.
             return false;
         }
+    }
+
+    public function validateSyntax(string $expression): void
+    {
+        if (trim($expression) === '') {
+            return;
+        }
+
+        try {
+            $this->expressionLanguage->lint($expression, null);
+        } catch (Throwable $e) {
+            throw new ExpressionEvaluationException(
+                'Invalid workflow condition expression syntax: '.$e->getMessage(),
+                $expression,
+                $e,
+            );
+        }
+    }
+
+    private function isStrict(): bool
+    {
+        return (bool) config('dbflow.expression.strict', false);
     }
 }
