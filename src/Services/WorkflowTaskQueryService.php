@@ -58,7 +58,8 @@ final class WorkflowTaskQueryService
      */
     public function pendingAssignmentsQueryForUser(string $userId): Builder
     {
-        return WorkflowTaskAssignment::query()
+        /** @var Builder<WorkflowTaskAssignment> $query */
+        $query = WorkflowTaskAssignment::query()
             ->where('assignee_user_id', $userId)
             ->where('status', WorkflowTaskAssignmentStatus::Pending)
             ->whereHas('workflowTask', static function ($query): void {
@@ -71,8 +72,9 @@ final class WorkflowTaskQueryService
                 'workflowTask.workflowInstance',
                 'workflowTask.workflowInstance.workflow',
                 'workflowTask.workflowInstance.workflowVersion',
-            ])
-            ->orderByDesc('created_at');
+            ]);
+
+        return $query->latest();
     }
 
     /**
