@@ -150,6 +150,35 @@ if ($failures !== []) {
         fwrite(STDERR, " - {$failure}\n");
     }
 
+    fwrite(STDERR, "\nLowest-covered src/ files:\n");
+
+    $ranked = [];
+
+    foreach ($fileMetrics as $path => $metrics) {
+        $percent = $metrics['statements'] > 0
+            ? ($metrics['covered'] / $metrics['statements']) * 100
+            : 0.0;
+
+        $ranked[] = [
+            'path' => $path,
+            'percent' => $percent,
+            'covered' => $metrics['covered'],
+            'statements' => $metrics['statements'],
+        ];
+    }
+
+    usort($ranked, static fn (array $left, array $right): int => $left['percent'] <=> $right['percent']);
+
+    foreach (array_slice($ranked, 0, 15) as $entry) {
+        fwrite(STDERR, sprintf(
+            " - %s: %.2f%% (%d/%d)\n",
+            $entry['path'],
+            $entry['percent'],
+            $entry['covered'],
+            $entry['statements'],
+        ));
+    }
+
     exit(1);
 }
 

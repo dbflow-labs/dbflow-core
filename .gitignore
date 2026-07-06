@@ -8,6 +8,7 @@
 .env
 .env.*
 .php-cs-fixer.dist.php
+.php-cs-fixer.cache
 /docs/*
 !/docs/integration/
 !/docs/integration/**
