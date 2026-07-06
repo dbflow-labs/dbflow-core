@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EcosystemContractTest` to lock `WorkflowTaskQueryService` public API, eager loads, and event constructor properties.
 - Container binding for `WorkflowTaskQueryService` (singleton).
 - `WorkflowTaskQueryService::pendingAssignmentsQueryForUser()` for Filament tables and custom paginators.
+- Pending-task query eager-loads `workflowTask.workflowInstance.workflowable` for subject links.
 
 ### Documentation
 

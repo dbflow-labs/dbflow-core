@@ -72,6 +72,7 @@ final class WorkflowTaskQueryService
                 'workflowTask.workflowInstance',
                 'workflowTask.workflowInstance.workflow',
                 'workflowTask.workflowInstance.workflowVersion',
+                'workflowTask.workflowInstance.workflowable',
             ]);
 
         return $query->latest();

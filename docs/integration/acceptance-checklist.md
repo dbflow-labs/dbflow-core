@@ -33,14 +33,14 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 | Submit / start from host resource | `DBFlow::start()` | [ ] (host responsibility) |
 
 - [x] No direct SQL/eloquent updates to `dbflow_workflow_task_assignments.status` for approve/reject/reassign
-- [ ] `DBFLOW_ENABLED=false` hides or disables runtime actions in UI (consistent with Core)
+- [x] `DBFLOW_ENABLED=false` hides or disables runtime actions in UI (consistent with Core)
 
 ---
 
 ## Filament — links and notifications
 
-- [ ] Workflowable link column uses `WorkflowRouteResolvable::getWorkflowShowUrl()` when implemented
-- [ ] `null` URL degrades without error (text-only subject label)
+- [x] Workflowable link column uses `WorkflowRouteResolvable::getWorkflowShowUrl()` when implemented
+- [x] `null` URL degrades without error (text-only subject label)
 - [ ] Optional: notification listeners documented for `TaskTimedOut` vs `TaskRejected`
 
 ---

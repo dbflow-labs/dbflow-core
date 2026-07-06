@@ -38,6 +38,7 @@ final class EcosystemContractTest extends TestCase
         'workflowTask.workflowInstance',
         'workflowTask.workflowInstance.workflow',
         'workflowTask.workflowInstance.workflowVersion',
+        'workflowTask.workflowInstance.workflowable',
     ];
 
     #[Test]

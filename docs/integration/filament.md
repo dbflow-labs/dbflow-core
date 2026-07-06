@@ -73,6 +73,7 @@ workflowTask
 workflowTask.workflowInstance
 workflowTask.workflowInstance.workflow
 workflowTask.workflowInstance.workflowVersion
+workflowTask.workflowInstance.workflowable
 ```
 
 Integrators may rely on these relations being loaded **without extra queries** after pagination. Do not depend on undeclared relations.
