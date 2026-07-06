@@ -79,17 +79,15 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 ### Packagist Installation
 
 ```bash
-composer require dbflowlabs/core:0.9.0-beta.1
+composer require dbflowlabs/core:1.0.0-rc.1
 ```
-
-> The `1.0.0-rc.1` release candidate is in progress and not yet tagged. Once available, pin it the same way: `composer require dbflowlabs/core:1.0.0-rc.1`. Until then, `0.9.0-beta.1` is the latest installable tag.
 
 Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit prerelease tag (as above) or temporarily allow prereleases in the host `composer.json`.
 
 Releases are tagged on GitHub, for example:
 
 ```text
-v0.9.0-beta.1
+v1.0.0-rc.1
 ```
 
 ## Laravel Integration
@@ -544,7 +542,7 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:0.9.0-beta.1` (or `1.0.0-rc.1` once tagged).
+1. `composer require dbflowlabs/core:1.0.0-rc.1` (pair with `dbflowlabs/filament:1.0.0-rc.1` when using the Filament adapter).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
@@ -591,7 +589,7 @@ Cross-package contracts for pending-task queries, runtime actions, events, and v
 - [`docs/integration/filament.md`](docs/integration/filament.md) — public API surface for `dbflowlabs/filament` integrators
 - [`docs/integration/acceptance-checklist.md`](docs/integration/acceptance-checklist.md) — release verification checklist
 
-Target version pairing: `dbflowlabs/filament` `0.9.x-beta` requires `dbflowlabs/core` `^0.9.0-beta`; stable `1.0.0` pairs require `^1.0.0` on both packages.
+Target version pairing: `dbflowlabs/filament` `1.0.0-rc.x` requires `dbflowlabs/core` `^1.0.0-rc.1`; stable `1.0.0` pairs require `^1.0.0` on both packages.
 
 **Choosing a UI path:**
 

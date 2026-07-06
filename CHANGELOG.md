@@ -5,12 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-rc.1] - Unreleased
+## [1.0.0-rc.1] - 2026-07-07
 
 ### Added
 
 - `UPGRADE-1.0.md` — consolidated upgrade guide from `0.2` through `1.0`.
 - `PublicApiContractTest` — locks `DBFlow` runtime/registration API and `TaskHooks` method signatures.
+- `DbflowRegistrationApiTest` — covers `DBFlow::register*` boot-time registration paths.
+- `WorkflowDefinitionManagementTest` — exercises internal definition-management actions.
+- Coverage tests for `LogicFlowDefinitionMapper`, `LogActionHandler`, and `LocalStatusUpdateHandler`.
 - `scripts/check-coverage.php` and CI coverage gates: runtime API scope ≥ 80%, full `src/` ≥ 70%.
 - Composer scripts: `test:coverage`, `coverage:check`.
 
@@ -182,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - If you previously set `DBFLOW_ENABLED=false` but still called runtime APIs, expect `WorkflowNotAvailableException` after upgrading.
 - Replace imports of `Services\WorkflowDefinitionValidator` with `Validation\WorkflowDefinitionValidator`.
 
+[1.0.0-rc.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.9.0-beta.1...1.0.0-rc.1
+[0.9.0-beta.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.5.0-alpha.1...0.9.0-beta.1
 [0.4.0-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.3.1-alpha.1...0.4.0-alpha.1
 [0.3.1-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.3.0-alpha.1...0.3.1-alpha.1
 [0.3.0-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.2.0-alpha.1...0.3.0-alpha.1
