@@ -48,7 +48,7 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 ## Cross-package CI
 
 - [x] `dbflow-filament`: `composer test` green against Core `0.9.x-beta` (path dependency)
-- [ ] `dbflow-filament-pro`: `composer test` green (or N/A with documented exception)
+- [x] `dbflow-filament-pro`: `composer test` green (322/322; path dependency to Core/Filament 0.9 worktrees; no Pro code changes required)
 - [ ] Version constraint updated in Filament `composer.json` to `^0.9.0-beta`
 - [ ] Both packages CHANGELOG entries for coordinated beta tag
 
