@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0-beta.1] - Unreleased
+
+### Added
+
+- Filament integration contract: `docs/integration/filament.md` and `docs/integration/acceptance-checklist.md`.
+- `EcosystemContractTest` to lock `WorkflowTaskQueryService` public API, eager loads, and event constructor properties.
+- Container binding for `WorkflowTaskQueryService` (singleton).
+
+### Documentation
+
+- README links to Filament integration contract.
+- Documented version matrix: `dbflowlabs/filament ^0.9` requires `dbflowlabs/core ^0.9`.
+
 ## [0.5.0-alpha.1] - 2026-07-07
 
 ### Added

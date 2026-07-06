@@ -581,6 +581,15 @@ DBFlow is designed as a layered ecosystem:
 
 Core runs the workflow. Filament packages provide user interfaces. Host applications provide business adapters.
 
+### Filament integration contract (0.9-beta+)
+
+Cross-package contracts for pending-task queries, runtime actions, events, and version alignment are documented in:
+
+- [`docs/integration/filament.md`](docs/integration/filament.md) — public API surface for `dbflowlabs/filament` integrators
+- [`docs/integration/acceptance-checklist.md`](docs/integration/acceptance-checklist.md) — release verification checklist
+
+Target version pairing: `dbflowlabs/filament` `0.9.x-beta` requires `dbflowlabs/core` `^0.9.0-beta`; stable `1.0.0` pairs require `^1.0.0` on both packages.
+
 **Choosing a UI path:**
 
 - Need only **submit / withdraw** on a host edit page? Implement host Filament (or Blade) actions that call `DBFlow::start()` / `cancel()` — Core alone is sufficient.

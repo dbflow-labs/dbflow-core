@@ -40,6 +40,7 @@ use DbflowLabs\Core\Services\WorkflowDefinitionResolver;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowLogger;
 use DbflowLabs\Core\Services\WorkflowNodeTraverser;
+use DbflowLabs\Core\Services\WorkflowTaskQueryService;
 use DbflowLabs\Core\Support\ActionManager;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ConfigUserResolver;
@@ -142,6 +143,11 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(WorkflowDefinitionRegistry::class),
                 $app->make(WorkflowDefinitionValidator::class),
             ),
+        );
+
+        $this->app->singleton(
+            WorkflowTaskQueryService::class,
+            static fn (): WorkflowTaskQueryService => new WorkflowTaskQueryService,
         );
     }
 
