@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filament integration contract: `docs/integration/filament.md` and `docs/integration/acceptance-checklist.md`.
 - `EcosystemContractTest` to lock `WorkflowTaskQueryService` public API, eager loads, and event constructor properties.
 - Container binding for `WorkflowTaskQueryService` (singleton).
+- `WorkflowTaskQueryService::pendingAssignmentsQueryForUser()` for Filament tables and custom paginators.
 
 ### Documentation
 

@@ -21,6 +21,7 @@ use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Generic pending-task query service for dashboards, APIs, mail digests, and similar consumers.
@@ -45,6 +46,18 @@ final class WorkflowTaskQueryService
      */
     public function getPendingTasksForUser(string $userId, int $perPage = 10): LengthAwarePaginator
     {
+        return $this->pendingAssignmentsQueryForUser($userId)->paginate($perPage);
+    }
+
+    /**
+     * Returns the base query for pending assignments (Filament tables, exports, custom paginators).
+     *
+     * Applies the same filters and eager loads as {@see getPendingTasksForUser()}.
+     *
+     * @return Builder<WorkflowTaskAssignment>
+     */
+    public function pendingAssignmentsQueryForUser(string $userId): Builder
+    {
         return WorkflowTaskAssignment::query()
             ->where('assignee_user_id', $userId)
             ->where('status', WorkflowTaskAssignmentStatus::Pending)
@@ -59,8 +72,7 @@ final class WorkflowTaskQueryService
                 'workflowTask.workflowInstance.workflow',
                 'workflowTask.workflowInstance.workflowVersion',
             ])
-            ->orderByDesc('created_at')
-            ->paginate($perPage);
+            ->orderByDesc('created_at');
     }
 
     /**

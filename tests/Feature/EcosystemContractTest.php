@@ -57,7 +57,7 @@ final class EcosystemContractTest extends TestCase
             static fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === WorkflowTaskQueryService::class,
         ));
 
-        $this->assertCount(2, $publicMethods);
+        $this->assertCount(3, $publicMethods);
 
         $signatures = [];
 
@@ -70,6 +70,7 @@ final class EcosystemContractTest extends TestCase
         $this->assertSame([
             'countPendingTasksForUser' => 'countPendingTasksForUser:string:int',
             'getPendingTasksForUser' => 'getPendingTasksForUser:string:int:'.LengthAwarePaginator::class,
+            'pendingAssignmentsQueryForUser' => 'pendingAssignmentsQueryForUser:string:'.\Illuminate\Database\Eloquent\Builder::class,
         ], $signatures);
     }
 

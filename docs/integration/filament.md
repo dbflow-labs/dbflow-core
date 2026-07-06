@@ -51,6 +51,7 @@ app(\DbflowLabs\Core\Services\WorkflowTaskQueryService::class);
 | Method | Signature | Behavior |
 | --- | --- | --- |
 | `getPendingTasksForUser` | `(string $userId, int $perPage = 10): LengthAwarePaginator` | Paginated pending assignments for inbox UIs |
+| `pendingAssignmentsQueryForUser` | `(string $userId): Builder` | Same filters and eager loads as above; for custom paginators (e.g. Filament tables) |
 | `countPendingTasksForUser` | `(string $userId): int` | Badge / notification count; single COUNT query |
 
 **Filtering rules (both methods):**
