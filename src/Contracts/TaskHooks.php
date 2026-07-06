@@ -27,4 +27,11 @@ interface TaskHooks
     public function onAfterApprove(WorkflowTask $task, WorkflowInstance $instance, mixed $actor): void;
 
     public function onAfterReject(WorkflowTask $task, WorkflowInstance $instance, mixed $actor): void;
+
+    public function onReassigned(
+        WorkflowTask $task,
+        WorkflowInstance $instance,
+        mixed $actor,
+        string $toUserId,
+    ): void;
 }

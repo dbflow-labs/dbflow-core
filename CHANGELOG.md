@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `DBFlow::reassign($task, $fromActor, $toUserId, $comment = null)` runtime API.
+- `ReassignTask` action with `TaskReassigned` Laravel event and `WorkflowLogEvent::TaskReassigned` audit logging.
+- `TaskHooks::onReassigned()` extension point.
+- `WorkflowTaskAssignmentStatus::Reassigned` assignment status.
+- `UserCannotReassignTaskException` for authorization and validation failures.
+- Feature tests for Any / All / Sequential reassign flows and disabled-runtime guard.
+
+### Changed
+
+- **BREAKING:** `TaskHooks` implementers must add `onReassigned()` (or extend `NullTaskHooks` patterns).
+
+### Upgrade notes
+
+- Custom `TaskHooks` classes require a new `onReassigned()` method.
+- Queries against `dbflow_workflow_task_assignments` should treat `reassigned` as a terminal assignment status.
+
 ## [0.3.1-alpha.1] - 2026-07-07
 
 ### Added

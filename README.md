@@ -174,7 +174,7 @@ DBFLOW_EXPRESSION_STRICT=false
 `ConfigUserResolver` supports integer and string primary keys at runtime. User references are stored as strings in `dbflow_*` tables.
 
 > [!NOTE]
-> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` throw `WorkflowNotAvailableException`, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
+> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` / `reassign()` throw `WorkflowNotAvailableException`, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
 
 ## Minimal Usage
 
@@ -372,7 +372,31 @@ DBFlow::cancel(
 | `rejected` | Block until a new `start()` completes successfully |
 | `cancelled` | Host choice: allow action, require re-submit, or keep blocked |
 
-### 7. Query Workflow State on Models
+### 7. Reassign a Pending Task
+
+`DBFlow::reassign()` replaces a **single pending assignment** with a new assignee. It does not advance the workflow.
+
+```php
+DBFlow::reassign(
+    $task,
+    auth()->user(),
+    $replacementUserId,
+    'Reassigned while on leave.',
+);
+```
+
+**What Core does:**
+
+- Marks the actor's pending assignment as `reassigned`
+- Creates a new `pending` assignment for `$toUserId` (inherits `sequence` in Sequential mode)
+- Writes `WorkflowLogEvent::TaskReassigned`, dispatches `TaskReassigned`, and calls `TaskHooks::onReassigned`
+
+**What Core does *not* do:**
+
+- **Does not enforce admin/delegate policies.** Host must authorize who may reassign before calling `reassign()`.
+- **Does not support add-sign / delegate-to-multiple.** Only one assignment is replaced per call.
+
+### 8. Query Workflow State on Models
 
 Models using `HasWorkflow` can inspect runtime state without raw SQL:
 
@@ -395,12 +419,13 @@ Use `DbflowLabs\Core\DBFlow` as the single runtime entry point during alpha.
 | `approve($task, $actor = null, $comment = null)` | Approve a pending task | `WorkflowInstance` |
 | `reject($task, $actor = null, $comment = null, $strategy, $targetNodeKey = null)` | Reject a pending task | `WorkflowInstance` |
 | `cancel($instance, $actor = null, $comment = null)` | Cancel a running instance | `WorkflowInstance` |
+| `reassign($task, $fromActor, $toUserId, $comment = null)` | Reassign a pending assignment to another user | `WorkflowInstance` |
 | `registerDefinitionProvider($registry, $provider)` | Boot-time code definition registration | `void` |
 | `registerAssigneeResolver($registry, $key, $resolver)` | Boot-time assignee resolver registration | `void` |
 | `registerWorkflowHooks($registry, $workflowKey, $hooks)` | Boot-time lifecycle hooks | `void` |
 | `registerTaskHooks($registry, $workflowKey, $hooks)` | Boot-time task-level hooks | `void` |
 
-Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel`) are usually called from host services, controllers, or UI actions.
+Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel` / `reassign`) are usually called from host services, controllers, or UI actions.
 
 ## Assignee Types (Runtime)
 

@@ -19,6 +19,7 @@ namespace DbflowLabs\Core;
 
 use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
+use DbflowLabs\Core\Actions\ReassignTask;
 use DbflowLabs\Core\Actions\RejectTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
 use DbflowLabs\Core\Contracts\AssigneeResolver;
@@ -147,5 +148,19 @@ final class DBFlow
         DbflowRuntime::ensureEnabled();
 
         return app(CancelWorkflow::class)->handle($instance, $actor, $comment);
+    }
+
+    /**
+     * Reassign a pending task assignment from the current assignee to another user.
+     */
+    public static function reassign(
+        WorkflowTask $task,
+        mixed $fromActor,
+        string $toUserId,
+        ?string $comment = null,
+    ): WorkflowInstance {
+        DbflowRuntime::ensureEnabled();
+
+        return app(ReassignTask::class)->handle($task, $fromActor, $toUserId, $comment);
     }
 }

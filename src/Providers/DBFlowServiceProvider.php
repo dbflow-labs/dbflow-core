@@ -22,6 +22,7 @@ use DbflowLabs\Core\Actions\LogActionHandler;
 use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
 use DbflowLabs\Core\Actions\RejectTask;
+use DbflowLabs\Core\Actions\ReassignTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
 use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
 use DbflowLabs\Core\Console\Commands\SyncWorkflowDefinitionsCommand;
@@ -223,6 +224,14 @@ final class DBFlowServiceProvider extends ServiceProvider
             fn ($app): CancelWorkflow => new CancelWorkflow(
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
+            ),
+        );
+
+        $this->app->singleton(
+            ReassignTask::class,
+            fn ($app): ReassignTask => new ReassignTask(
+                $app->make(WorkflowLogger::class),
+                $app->make(TaskHooksRegistry::class),
             ),
         );
     }

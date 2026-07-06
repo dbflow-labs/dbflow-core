@@ -24,6 +24,7 @@ enum WorkflowTaskAssignmentStatus: string
     case Rejected = 'rejected';
     case Cancelled = 'cancelled';
     case Skipped = 'skipped';
+    case Reassigned = 'reassigned';
 
     public function label(): string
     {
@@ -33,6 +34,7 @@ enum WorkflowTaskAssignmentStatus: string
             self::Rejected => 'Rejected',
             self::Cancelled => 'Cancelled',
             self::Skipped => 'Skipped',
+            self::Reassigned => 'Reassigned',
         };
     }
 
@@ -43,6 +45,7 @@ enum WorkflowTaskAssignmentStatus: string
             self::Rejected,
             self::Cancelled,
             self::Skipped,
+            self::Reassigned,
         ], true);
     }
 }

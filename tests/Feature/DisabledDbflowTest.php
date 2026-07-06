@@ -84,6 +84,12 @@ final class DisabledDbflowTest extends TestCase
         } catch (WorkflowNotAvailableException) {
         }
 
+        try {
+            DBFlow::reassign($task, 1, '2');
+            $this->fail('Expected WorkflowNotAvailableException for reassign().');
+        } catch (WorkflowNotAvailableException) {
+        }
+
         $this->assertTrue(true);
     }
 
