@@ -4,6 +4,7 @@
 .phpunit.cache/
 .idea/
 .vscode/
+.cursor/
 .env
 .env.*
 .php-cs-fixer.dist.php
