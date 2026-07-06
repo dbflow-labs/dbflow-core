@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0-beta.1] - Unreleased
+## [0.9.0-beta.1] - 2026-07-07
 
 ### Added
 
@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README links to Filament integration contract.
 - Documented version matrix: `dbflowlabs/filament ^0.9` requires `dbflowlabs/core ^0.9`.
+
+### Upgrade notes
+
+- Pin `dbflowlabs/core:0.9.0-beta.1` when adopting the Filament integration contract.
+- Pair with `dbflowlabs/filament:0.9.0-beta.1` for coordinated beta testing.
+- `WorkflowTaskQueryService` public method signatures are frozen from this release; see `docs/integration/filament.md`.
 
 ## [0.5.0-alpha.1] - 2026-07-07
 
