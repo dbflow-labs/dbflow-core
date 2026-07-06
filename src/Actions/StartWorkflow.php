@@ -46,6 +46,7 @@ use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ResolvesActorUserId;
 use DbflowLabs\Core\Support\ResolvesTaskHooks;
 use DbflowLabs\Core\Support\ResolvesWorkflowHooks;
+use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use DbflowLabs\Core\Support\WorkflowCompletionStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
@@ -62,6 +63,7 @@ final class StartWorkflow
         private readonly TransitionResolver $transitionResolver,
         private readonly WorkflowNodeTraverser $nodeTraverser,
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
+        private readonly TimeoutDueAtResolver $timeoutDueAtResolver,
         private readonly WorkflowLogger $logger,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
         private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
@@ -214,6 +216,7 @@ final class StartWorkflow
             'node_name' => $node->name(),
             'status' => WorkflowTaskStatus::Pending,
             'approval_mode' => $approvalMode,
+            'due_at' => $this->timeoutDueAtResolver->resolveDueAt($node->timeoutDueIn()),
         ]);
 
         $this->createAssignments($task, $approvalMode, $assigneeUserIds);

@@ -87,6 +87,8 @@ final class WorkflowDefinitionSchema
 
     public const CONFIG_ASSIGNEES = 'assignees';
 
+    public const CONFIG_TIMEOUT = 'timeout';
+
     public const CONFIG_EXPRESSION = 'expression';
 
     public const CONFIG_STATUS = 'status';
@@ -96,6 +98,10 @@ final class WorkflowDefinitionSchema
     public const ASSIGNEE_FIELD_VALUE = 'value';
 
     public const ASSIGNEE_FIELD_CALLBACK = 'callback';
+
+    public const TIMEOUT_DUE_IN = 'due_in';
+
+    public const TIMEOUT_ON_TIMEOUT = 'on_timeout';
 
     public const KEY_PATTERN = '/^[a-z0-9_]+$/';
 

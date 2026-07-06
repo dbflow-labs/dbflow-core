@@ -29,6 +29,7 @@ enum WorkflowLogEvent: string
     case TaskCancelled = 'task_cancelled';
     case TaskSkipped = 'task_skipped';
     case TaskReassigned = 'task_reassigned';
+    case TaskTimedOut = 'task_timed_out';
     case ActionExecuted = 'action_executed';
     case ActionFailed = 'action_failed';
 
@@ -45,6 +46,7 @@ enum WorkflowLogEvent: string
             self::TaskCancelled => 'Task cancelled',
             self::TaskSkipped => 'Task skipped',
             self::TaskReassigned => 'Task reassigned',
+            self::TaskTimedOut => 'Task timed out',
             self::ActionExecuted => 'Action node executed',
             self::ActionFailed => 'Action node execution failed',
         };

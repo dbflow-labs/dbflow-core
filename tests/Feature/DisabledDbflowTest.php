@@ -116,6 +116,13 @@ final class DisabledDbflowTest extends TestCase
         $this->artisan('dbflow:sync')
             ->assertSuccessful();
     }
+
+    #[Test]
+    public function process_timeouts_command_fails_when_disabled(): void
+    {
+        $this->artisan('dbflow:process-timeouts')
+            ->assertFailed();
+    }
 }
 
 /**

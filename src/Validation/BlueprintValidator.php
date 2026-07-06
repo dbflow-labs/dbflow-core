@@ -25,6 +25,7 @@ use DbflowLabs\Core\Definitions\Nodes\StartNode;
 use DbflowLabs\Core\Definitions\Transition;
 use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
 use DbflowLabs\Core\Enums\ApprovalMode;
+use DbflowLabs\Core\Enums\TimeoutOnTimeout;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowTopologyException;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
@@ -33,6 +34,7 @@ use DbflowLabs\Core\Validation\Topology\IsolatedNodeDetector;
 use DbflowLabs\Core\Validation\Topology\ReachabilityAnalyzer;
 use DbflowLabs\Core\Validation\Topology\TerminationAnalyzer;
 use DbflowLabs\Core\Validation\Topology\WorkflowGraph;
+use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use InvalidArgumentException;
 
 final class BlueprintValidator
@@ -256,6 +258,8 @@ final class BlueprintValidator
 
     private function validateApprovalNode(string $nodePath, ApprovalNode $node): void
     {
+        $this->validateApprovalNodeTimeout($nodePath, $node);
+
         $assignees = $node->assignees();
         $assigneeType = $assignees[WorkflowDefinitionSchema::ASSIGNEE_FIELD_TYPE] ?? null;
 
@@ -337,6 +341,71 @@ final class BlueprintValidator
                 'User assignee value must be a positive integer user id.',
             );
         }
+    }
+
+    private function validateApprovalNodeTimeout(string $nodePath, ApprovalNode $node): void
+    {
+        $dueIn = $node->timeoutDueIn();
+        $onTimeout = $node->timeoutOnTimeout();
+        $onTimeoutRaw = null;
+
+        if ($this->currentBlueprint !== null) {
+            $definitionNode = $this->findDefinitionNode($node->key());
+            $config = is_array($definitionNode['config'] ?? null) ? $definitionNode['config'] : [];
+            $timeout = is_array($config[WorkflowDefinitionSchema::CONFIG_TIMEOUT] ?? null)
+                ? $config[WorkflowDefinitionSchema::CONFIG_TIMEOUT]
+                : [];
+            $raw = $timeout[WorkflowDefinitionSchema::TIMEOUT_ON_TIMEOUT] ?? null;
+            $onTimeoutRaw = is_string($raw) ? $raw : null;
+        }
+
+        if ($dueIn === null && $onTimeout === null && ($onTimeoutRaw === null || $onTimeoutRaw === '')) {
+            return;
+        }
+
+        if ($dueIn === null || $dueIn === '') {
+            $this->addError(
+                $nodePath.'.config.timeout.due_in',
+                'required',
+                'Approval node timeout.due_in is required when timeout is configured.',
+            );
+
+            return;
+        }
+
+        if (! TimeoutDueAtResolver::isValidDuration($dueIn)) {
+            $this->addError(
+                $nodePath.'.config.timeout.due_in',
+                'invalid_value',
+                'Approval node timeout.due_in must be a positive ISO 8601 duration (for example P1D or PT24H).',
+            );
+        }
+
+        if ($onTimeoutRaw !== null && $onTimeoutRaw !== '' && ! $onTimeout instanceof TimeoutOnTimeout) {
+            $this->addError(
+                $nodePath.'.config.timeout.on_timeout',
+                'invalid_value',
+                'Approval node timeout.on_timeout must be reject_end when provided.',
+            );
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function findDefinitionNode(string $nodeKey): ?array
+    {
+        if ($this->currentBlueprint === null) {
+            return null;
+        }
+
+        foreach ($this->currentBlueprint->toArray()[WorkflowDefinitionSchema::FIELD_NODES] ?? [] as $node) {
+            if (is_array($node) && ($node[WorkflowDefinitionSchema::FIELD_KEY] ?? null) === $nodeKey) {
+                return $node;
+            }
+        }
+
+        return null;
     }
 
     private function assertAssigneeResolverRegistered(string $path, string $resolverKey): void

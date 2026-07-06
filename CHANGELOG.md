@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0-alpha.1] - Unreleased
+
+### Added
+
+- Approval node `config.timeout.due_in` (ISO 8601 duration) with runtime `workflow_tasks.due_at` assignment on task creation.
+- `php artisan dbflow:process-timeouts` to audit overdue tasks and optionally auto-reject when `on_timeout: reject_end`.
+- `WorkflowLogEvent::TaskTimedOut` audit logging and `TaskTimedOut` Laravel event.
+- `dbflow:validate` checks for invalid timeout configuration.
+
+### Documentation
+
+- README timeout configuration and scheduler guidance.
+
 ## [0.4.0-alpha.1] - 2026-07-07
 
 ### Added

@@ -22,9 +22,11 @@ use DbflowLabs\Core\Actions\LogActionHandler;
 use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
 use DbflowLabs\Core\Actions\RejectTask;
+use DbflowLabs\Core\Actions\ProcessTaskTimeouts;
 use DbflowLabs\Core\Actions\ReassignTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
 use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
+use DbflowLabs\Core\Console\Commands\ProcessTaskTimeoutsCommand;
 use DbflowLabs\Core\Console\Commands\SyncWorkflowDefinitionsCommand;
 use DbflowLabs\Core\Console\Commands\ValidateWorkflowDefinitionsCommand;
 use DbflowLabs\Core\Contracts\UserResolver;
@@ -42,6 +44,7 @@ use DbflowLabs\Core\Support\ActionManager;
 use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ConfigUserResolver;
 use DbflowLabs\Core\Support\DbflowRuntime;
+use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use DbflowLabs\Core\Validation\WorkflowDefinitionValidator;
 use Illuminate\Support\ServiceProvider;
 
@@ -70,6 +73,7 @@ final class DBFlowServiceProvider extends ServiceProvider
             $this->commands([
                 SyncWorkflowDefinitionsCommand::class,
                 ValidateWorkflowDefinitionsCommand::class,
+                ProcessTaskTimeoutsCommand::class,
             ]);
 
             $this->publishes([
@@ -175,6 +179,11 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
+            TimeoutDueAtResolver::class,
+            static fn (): TimeoutDueAtResolver => new TimeoutDueAtResolver,
+        );
+
+        $this->app->singleton(
             WorkflowNodeTraverser::class,
             fn ($app): WorkflowNodeTraverser => new WorkflowNodeTraverser(
                 $app->make(TransitionResolver::class),
@@ -190,6 +199,7 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(TransitionResolver::class),
                 $app->make(WorkflowNodeTraverser::class),
                 $app->make(ApprovalNodeAssigneeResolver::class),
+                $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),
@@ -202,6 +212,7 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(TransitionResolver::class),
                 $app->make(WorkflowNodeTraverser::class),
                 $app->make(ApprovalNodeAssigneeResolver::class),
+                $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),
@@ -232,6 +243,14 @@ final class DBFlowServiceProvider extends ServiceProvider
             fn ($app): ReassignTask => new ReassignTask(
                 $app->make(WorkflowLogger::class),
                 $app->make(TaskHooksRegistry::class),
+            ),
+        );
+
+        $this->app->singleton(
+            ProcessTaskTimeouts::class,
+            fn ($app): ProcessTaskTimeouts => new ProcessTaskTimeouts(
+                $app->make(RejectTask::class),
+                $app->make(WorkflowLogger::class),
             ),
         );
     }

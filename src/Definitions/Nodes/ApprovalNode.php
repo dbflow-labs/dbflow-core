@@ -20,6 +20,7 @@ namespace DbflowLabs\Core\Definitions\Nodes;
 use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
 use DbflowLabs\Core\Enums\ApprovalMode;
 use DbflowLabs\Core\Enums\NodeType;
+use DbflowLabs\Core\Enums\TimeoutOnTimeout;
 use InvalidArgumentException;
 
 final class ApprovalNode extends AbstractWorkflowNode
@@ -32,6 +33,8 @@ final class ApprovalNode extends AbstractWorkflowNode
         string $name,
         private readonly ApprovalMode $approvalMode,
         private readonly array $assignees,
+        private readonly ?string $timeoutDueIn = null,
+        private readonly ?TimeoutOnTimeout $timeoutOnTimeout = null,
         ?array $position = null,
         array $metadata = [],
     ) {
@@ -54,6 +57,21 @@ final class ApprovalNode extends AbstractWorkflowNode
     public function assignees(): array
     {
         return $this->assignees;
+    }
+
+    public function timeoutDueIn(): ?string
+    {
+        return $this->timeoutDueIn;
+    }
+
+    public function timeoutOnTimeout(): ?TimeoutOnTimeout
+    {
+        return $this->timeoutOnTimeout;
+    }
+
+    public function hasTimeout(): bool
+    {
+        return $this->timeoutDueIn !== null && $this->timeoutDueIn !== '';
     }
 
     /**
@@ -96,11 +114,15 @@ final class ApprovalNode extends AbstractWorkflowNode
                 $assignees[WorkflowDefinitionSchema::ASSIGNEE_FIELD_CALLBACK];
         }
 
+        [$timeoutDueIn, $timeoutOnTimeout] = self::hydrateTimeout($config);
+
         return new self(
             key: $key,
             name: $name,
             approvalMode: $approvalMode,
             assignees: $normalizedAssignees,
+            timeoutDueIn: $timeoutDueIn,
+            timeoutOnTimeout: $timeoutOnTimeout,
             position: self::hydratePosition($data),
             metadata: self::hydrateMetadata($data),
         );
@@ -114,7 +136,42 @@ final class ApprovalNode extends AbstractWorkflowNode
             WorkflowDefinitionSchema::CONFIG_ASSIGNEES => $this->assignees,
         ];
 
+        if ($this->hasTimeout()) {
+            $timeout = [
+                WorkflowDefinitionSchema::TIMEOUT_DUE_IN => $this->timeoutDueIn,
+            ];
+
+            if ($this->timeoutOnTimeout instanceof TimeoutOnTimeout) {
+                $timeout[WorkflowDefinitionSchema::TIMEOUT_ON_TIMEOUT] = $this->timeoutOnTimeout->value;
+            }
+
+            $payload[WorkflowDefinitionSchema::FIELD_CONFIG][WorkflowDefinitionSchema::CONFIG_TIMEOUT] = $timeout;
+        }
+
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array{0: ?string, 1: ?TimeoutOnTimeout}
+     */
+    private static function hydrateTimeout(array $config): array
+    {
+        $timeout = $config[WorkflowDefinitionSchema::CONFIG_TIMEOUT] ?? null;
+
+        if (! is_array($timeout) || $timeout === []) {
+            return [null, null];
+        }
+
+        $dueIn = $timeout[WorkflowDefinitionSchema::TIMEOUT_DUE_IN] ?? null;
+        $timeoutDueIn = is_string($dueIn) && $dueIn !== '' ? $dueIn : null;
+
+        $onTimeoutValue = $timeout[WorkflowDefinitionSchema::TIMEOUT_ON_TIMEOUT] ?? null;
+        $timeoutOnTimeout = is_string($onTimeoutValue) && $onTimeoutValue !== ''
+            ? TimeoutOnTimeout::tryFrom($onTimeoutValue)
+            : null;
+
+        return [$timeoutDueIn, $timeoutOnTimeout];
     }
 
     /**

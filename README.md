@@ -174,7 +174,7 @@ DBFLOW_EXPRESSION_STRICT=false
 `ConfigUserResolver` supports integer and string primary keys at runtime. User references are stored as strings in `dbflow_*` tables.
 
 > [!NOTE]
-> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` / `reassign()` throw `WorkflowNotAvailableException`, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
+> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` / `reassign()` throw `WorkflowNotAvailableException`, `dbflow:process-timeouts` fails, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
 
 ## Minimal Usage
 
@@ -236,6 +236,12 @@ Validate definitions in CI:
 
 ```bash
 php artisan dbflow:validate --strict
+```
+
+Process overdue approval tasks (schedule via cron, for example every 5 minutes):
+
+```bash
+php artisan dbflow:process-timeouts
 ```
 
 Alternative for interactive or UI-owned workflows: `CreateWorkflowDraft` → `PublishWorkflowDraft` (see package actions and Filament packages).
@@ -396,7 +402,40 @@ DBFlow::reassign(
 - **Does not enforce admin/delegate policies.** Host must authorize who may reassign before calling `reassign()`.
 - **Does not support add-sign / delegate-to-multiple.** Only one assignment is replaced per call.
 
-### 8. Query Workflow State on Models
+### 8. Task Timeouts
+
+Approval nodes may declare an optional timeout in workflow definition `config`:
+
+```json
+{
+  "timeout": {
+    "due_in": "P3D",
+    "on_timeout": "reject_end"
+  }
+}
+```
+
+- `due_in` — ISO 8601 duration (for example `PT24H`, `P3D`). When a task is created, Core writes `workflow_tasks.due_at`.
+- `on_timeout` — optional. Only `reject_end` is supported in the MVP. When omitted, overdue tasks are **logged only** and remain `pending` (assignees may still approve manually).
+
+Schedule the command:
+
+```bash
+php artisan dbflow:process-timeouts
+```
+
+**What Core does:**
+
+- Writes `WorkflowLogEvent::TaskTimedOut` once per overdue task and dispatches `TaskTimedOut`
+- When `on_timeout: reject_end`, auto-rejects with `RejectStrategy::End` (system actor is `null` in audit logs)
+
+**What Core does *not* do:**
+
+- No reminders before due date
+- No escalation chains or `auto_approve`
+- No silent auto-reject when `on_timeout` is omitted
+
+### 9. Query Workflow State on Models
 
 Models using `HasWorkflow` can inspect runtime state without raw SQL:
 
