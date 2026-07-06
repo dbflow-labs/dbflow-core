@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0-alpha.1] - Unreleased
+## [0.5.0-alpha.1] - 2026-07-07
 
 ### Added
 
@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - README timeout configuration and scheduler guidance.
+
+### Upgrade notes
+
+- Pin `dbflowlabs/core:0.5.0-alpha.1` (or `^0.4.0-alpha.1` if you already allow prereleases).
+- Schedule `php artisan dbflow:process-timeouts` (for example every 15 minutes) when using approval timeouts.
+- When `DBFLOW_ENABLED=false`, `dbflow:process-timeouts` fails; `dbflow:sync` and `dbflow:validate` remain available.
+- Overdue tasks without `on_timeout` are audited only and stay `pending` until manually approved or rejected.
 
 ## [0.4.0-alpha.1] - 2026-07-07
 
