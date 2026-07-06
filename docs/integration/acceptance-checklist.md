@@ -62,3 +62,35 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 | Filament | | |
 
 When all Filament rows are checked, tag `0.9.0-beta.1` on both repositories and link releases in CHANGELOG.
+
+---
+
+## 1.0.0-rc integration (post API freeze)
+
+Use path or tagged dependencies: Core `1.0.0-rc.1`, Filament `1.0.0-rc.2+`, Pro path-linked to both.
+
+### Filament — definition editor (Core 0.5 alignment)
+
+- [x] Standard approval step form round-trips `config.timeout.due_in` and `config.timeout.on_timeout`
+- [x] Timeline presents `task_reassigned` and `task_timed_out` audit labels
+
+### Filament — links and notifications (RC follow-up)
+
+- [x] Timeline labels for `task_reassigned` and `task_timed_out`
+- [ ] Optional: host notification guide for `TaskTimedOut` vs `TaskRejected` (README / docs site)
+
+### Cross-package CI (RC)
+
+- [x] `dbflow-filament`: `composer test` green (139 tests) on `1.0.0-rc.2` worktree with Core `1.0.0-rc.1`
+- [x] `dbflow-filament-pro`: `composer test` green (323 tests) with path-linked Core/Filament RC worktrees; approval timeout round-trip covered
+- [x] `docs/integration/filament.md` documents timeout editor fields
+
+### Sign-off (RC)
+
+| Role | Name | Date |
+| --- | --- | --- |
+| Core | | |
+| Filament | | |
+| Pro | | |
+
+Pair `dbflowlabs/filament:1.0.0-rc.2` with `dbflowlabs/core:1.0.0-rc.1` until stable `1.0.0`.

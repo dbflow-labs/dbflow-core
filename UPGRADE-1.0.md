@@ -71,6 +71,7 @@ From `1.0.0-rc.1`, the following surfaces are **frozen** until `1.0.0` (only bac
 
 - Approval node `config.timeout.due_in` and `php artisan dbflow:process-timeouts`.
 - Schedule the timeout command when using approval deadlines.
+- **Filament / Pro:** from `dbflowlabs/filament:1.0.0-rc.2` and matching Pro worktrees, the standard form and Pro canvas editors round-trip `timeout` configuration without data loss.
 
 ### 0.9.0-beta.1
 

@@ -12,6 +12,7 @@ Core owns workflow **runtime semantics**. Filament owns **UI and panel wiring**.
 | `dbflowlabs/filament` | Requires `dbflowlabs/core` | Notes |
 | --- | --- | --- |
 | `0.9.x-beta` | `^0.9.0-beta` | Ecosystem alignment; prerelease pins recommended |
+| `1.0.0-rc.x` | `^1.0.0-rc.1` | API freeze RC; Core `1.0.0-rc.1` pairs with Filament `1.0.0-rc.2+` for timeout editor |
 | `1.0.0` | `^1.0.0` | Stable pair released together |
 
 During alpha (`0.3`–`0.5`), Filament may lag Core feature tags. From **0.9-beta** onward, integration releases should be coordinated and documented in both CHANGELOGs.
@@ -134,6 +135,19 @@ All events use `Dispatchable` and `SerializesModels`. Public constructor propert
 | `on_timeout` | `string\|null` | e.g. `reject_end`; `null` when omitted (audit-only) |
 
 `TaskTimedOut` is **independent** of `TaskRejected`. Listeners that notify assignees should subscribe to both when timeout auto-reject is configured.
+
+---
+
+## Definition editor — approval timeouts (Filament `1.0.0-rc.2+`)
+
+Standard and Pro canvas editors may expose optional approval fields that map to Core `config.timeout`:
+
+| Field | Core key | Notes |
+| --- | --- | --- |
+| Deadline duration | `timeout.due_in` | ISO 8601 duration (for example `P1D`, `PT24H`) |
+| Overdue action | `timeout.on_timeout` | `reject_end` for auto-reject; omit for audit-only |
+
+Hosts must schedule `php artisan dbflow:process-timeouts` when definitions use deadlines. Filament does not run the command.
 
 ---
 
