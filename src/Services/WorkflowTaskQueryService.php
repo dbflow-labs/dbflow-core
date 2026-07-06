@@ -39,10 +39,11 @@ final class WorkflowTaskQueryService
      * Each record includes the full workflowTask -> workflowInstance -> workflow chain,
      * allowing O(1) access to deep relations without extra queries.
      *
+     * @param  string  $userId  Assignee user id (integer string or UUID/ULID)
      * @param  int  $perPage  Items per page; default 10, recommended maximum 50
      * @return LengthAwarePaginator<int, WorkflowTaskAssignment>
      */
-    public function getPendingTasksForUser(int $userId, int $perPage = 10): LengthAwarePaginator
+    public function getPendingTasksForUser(string $userId, int $perPage = 10): LengthAwarePaginator
     {
         return WorkflowTaskAssignment::query()
             ->where('assignee_user_id', $userId)
@@ -67,7 +68,7 @@ final class WorkflowTaskQueryService
      *
      * Executes a single COUNT query without eager loading.
      */
-    public function countPendingTasksForUser(int $userId): int
+    public function countPendingTasksForUser(string $userId): int
     {
         return WorkflowTaskAssignment::query()
             ->where('assignee_user_id', $userId)

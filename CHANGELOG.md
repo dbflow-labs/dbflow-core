@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1-alpha.1] - 2026-07-07
+
+### Added
+
+- `CancelWorkflow` Feature Tests (state transitions, per-task `TaskCancelled` audit, idempotent cancel).
+- Feature tests for `DBFLOW_ENABLED=false`: runtime API exceptions and available `dbflow:sync` / `dbflow:validate`.
+- UUID assignee coverage for `WorkflowTaskQueryService`.
+- CI outputs PHPUnit line coverage via pcov (no threshold).
+
+### Changed
+
+- **`WorkflowTaskQueryService`:** `getPendingTasksForUser()` and `countPendingTasksForUser()` now accept `string $userId` (aligned with v0.3 user ID columns).
+- **`CancelWorkflow`:** writes `WorkflowLogEvent::TaskCancelled` for each pending task before the instance-level `WorkflowCancelled` log.
+- **`DBFLOW_ENABLED=false`:** runtime action bindings are skipped, but definition-management bindings, migrations, and `dbflow:sync` / `dbflow:validate` remain available.
+
+### Documentation
+
+- README updated for `DBFLOW_ENABLED` contract and cancel audit behavior.
+
+### Upgrade notes
+
+- Pin `dbflowlabs/core:0.3.1-alpha.1` (or `^0.3.0-alpha.1` if you already allow prereleases).
+- If you relied on `DBFLOW_ENABLED=false` blocking `dbflow:sync` / `dbflow:validate`, those commands are now available while the runtime remains disabled.
+
 ## [0.3.0-alpha.1] - 2026-07-06
 
 ### Added
@@ -67,5 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - If you previously set `DBFLOW_ENABLED=false` but still called runtime APIs, expect `WorkflowNotAvailableException` after upgrading.
 - Replace imports of `Services\WorkflowDefinitionValidator` with `Validation\WorkflowDefinitionValidator`.
 
+[0.3.1-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.3.0-alpha.1...0.3.1-alpha.1
 [0.3.0-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.2.0-alpha.1...0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.1.0-alpha.1...0.2.0-alpha.1

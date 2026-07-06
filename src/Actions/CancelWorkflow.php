@@ -62,6 +62,10 @@ final class CancelWorkflow
                 ->all();
 
             if ($pendingTaskIds !== []) {
+                $pendingTasks = WorkflowTask::query()
+                    ->whereIn('id', $pendingTaskIds)
+                    ->get();
+
                 WorkflowTask::query()
                     ->whereIn('id', $pendingTaskIds)
                     ->update([
@@ -76,6 +80,16 @@ final class CancelWorkflow
                         'status' => WorkflowTaskAssignmentStatus::Cancelled,
                         'acted_at' => now(),
                     ]);
+
+                foreach ($pendingTasks as $pendingTask) {
+                    $this->logger->log(
+                        $lockedInstance,
+                        WorkflowLogEvent::TaskCancelled,
+                        task: $pendingTask,
+                        actor: $actor,
+                        comment: $comment,
+                    );
+                }
             }
 
             $lockedInstance->forceFill([

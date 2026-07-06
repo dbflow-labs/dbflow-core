@@ -18,6 +18,7 @@ declare(strict_types=1);
 namespace DbflowLabs\Core\Tests\Feature;
 
 use DbflowLabs\Core\DBFlow;
+use DbflowLabs\Core\Models\WorkflowTaskAssignment;
 use DbflowLabs\Core\Services\WorkflowTaskQueryService;
 use DbflowLabs\Core\Tests\Concerns\BuildsMinimalPublishedWorkflow;
 use DbflowLabs\Core\Tests\Fixtures\ContextTestSubject;
@@ -42,17 +43,19 @@ final class WorkflowTaskQueryServiceTest extends TestCase
             'email' => 'other-user@dbflow.dev',
         ]);
 
+        $assigneeId = (string) $assignee->getKey();
+
         $this->createMinimalPublishedWorkflow(
             'inbox_query_flow',
             'Inbox Query Flow',
-            (string) $assignee->getKey(),
+            $assigneeId,
         );
 
         $subject = ContextTestSubject::query()->create(['reference_code' => 'INBOX-001']);
         DBFlow::start('inbox_query_flow', $subject, $otherUser->getKey());
 
         $service = new WorkflowTaskQueryService;
-        $paginator = $service->getPendingTasksForUser((int) $assignee->getKey());
+        $paginator = $service->getPendingTasksForUser($assigneeId);
 
         $this->assertSame(1, $paginator->total());
 
@@ -65,6 +68,35 @@ final class WorkflowTaskQueryServiceTest extends TestCase
     }
 
     #[Test]
+    public function it_returns_pending_assignments_for_uuid_assignee_ids(): void
+    {
+        $assignee = TestUser::query()->create([
+            'name' => 'UUID Inbox User',
+            'email' => 'uuid-inbox-user@dbflow.dev',
+        ]);
+
+        $uuidAssigneeId = '550e8400-e29b-41d4-a716-446655440000';
+
+        $this->createMinimalPublishedWorkflow(
+            'uuid_inbox_query_flow',
+            'UUID Inbox Query Flow',
+            (string) $assignee->getKey(),
+        );
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'UUID-INBOX-001']);
+        DBFlow::start('uuid_inbox_query_flow', $subject, $assignee->getKey());
+
+        WorkflowTaskAssignment::query()
+            ->where('assignee_user_id', (string) $assignee->getKey())
+            ->update(['assignee_user_id' => $uuidAssigneeId]);
+
+        $service = new WorkflowTaskQueryService;
+
+        $this->assertSame(1, $service->getPendingTasksForUser($uuidAssigneeId)->total());
+        $this->assertSame(1, $service->countPendingTasksForUser($uuidAssigneeId));
+    }
+
+    #[Test]
     public function pending_count_decreases_after_task_is_approved(): void
     {
         $assignee = TestUser::query()->create([
@@ -72,17 +104,18 @@ final class WorkflowTaskQueryServiceTest extends TestCase
             'email' => 'counter-user@dbflow.dev',
         ]);
 
+        $userId = (string) $assignee->getKey();
+
         $this->createMinimalPublishedWorkflow(
             'count_query_flow',
             'Count Query Flow',
-            (string) $assignee->getKey(),
+            $userId,
         );
 
         $subject = ContextTestSubject::query()->create(['reference_code' => 'COUNT-001']);
         $instance = DBFlow::start('count_query_flow', $subject, $assignee->getKey());
 
         $service = new WorkflowTaskQueryService;
-        $userId = (int) $assignee->getKey();
 
         $this->assertSame(1, $service->countPendingTasksForUser($userId));
 
@@ -100,10 +133,12 @@ final class WorkflowTaskQueryServiceTest extends TestCase
             'email' => 'stale-user@dbflow.dev',
         ]);
 
+        $userId = (string) $assignee->getKey();
+
         $this->createMinimalPublishedWorkflow(
             'stale_query_flow',
             'Stale Query Flow',
-            (string) $assignee->getKey(),
+            $userId,
         );
 
         $subject = ContextTestSubject::query()->create(['reference_code' => 'STALE-001']);
@@ -114,7 +149,7 @@ final class WorkflowTaskQueryServiceTest extends TestCase
 
         $service = new WorkflowTaskQueryService;
 
-        $this->assertSame(0, $service->countPendingTasksForUser((int) $assignee->getKey()));
-        $this->assertSame(0, $service->getPendingTasksForUser((int) $assignee->getKey())->total());
+        $this->assertSame(0, $service->countPendingTasksForUser($userId));
+        $this->assertSame(0, $service->getPendingTasksForUser($userId)->total());
     }
 }

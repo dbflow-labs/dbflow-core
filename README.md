@@ -78,7 +78,7 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 ### Packagist Installation
 
 ```bash
-composer require dbflowlabs/core:0.3.0-alpha.1
+composer require dbflowlabs/core:0.3.1-alpha.1
 ```
 
 Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
@@ -86,7 +86,7 @@ Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If C
 Releases are tagged on GitHub, for example:
 
 ```text
-v0.3.0-alpha.1
+v0.3.1-alpha.1
 ```
 
 ## Laravel Integration
@@ -174,7 +174,7 @@ DBFLOW_EXPRESSION_STRICT=false
 `ConfigUserResolver` supports integer and string primary keys at runtime. User references are stored as strings in `dbflow_*` tables.
 
 > [!NOTE]
-> Set `DBFLOW_ENABLED=false` to disable the workflow runtime. When disabled, `DBFlowServiceProvider` skips service bindings and migrations, and `DBFlow::start()` / `approve()` / `reject()` / `cancel()` throw `WorkflowNotAvailableException`. Registration helpers (`registerDefinitionProvider`, etc.) remain available so hosts can prepare definitions before re-enabling.
+> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` throw `WorkflowNotAvailableException`, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
 
 ## Minimal Usage
 
@@ -358,7 +358,7 @@ DBFlow::cancel(
 - Sets instance status to `cancelled`
 - Cancels pending tasks and assignments
 - Clears `active_key` so the same workflowable may be started again (if the host allows)
-- Writes `WorkflowLogEvent::WorkflowCancelled` and calls `WorkflowHooks::onCancelled`
+- Writes `WorkflowLogEvent::WorkflowCancelled`, one `WorkflowLogEvent::TaskCancelled` per pending task, and calls `WorkflowHooks::onCancelled`
 
 **What Core does *not* do:**
 
@@ -477,7 +477,7 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:0.3.0-alpha.1` (or pin the latest alpha tag).
+1. `composer require dbflowlabs/core:0.3.1-alpha.1` (or pin the latest alpha tag).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
@@ -553,7 +553,7 @@ Until a stable `1.0.0` release is reached, public APIs and schema definitions ma
 
 Recommended production usage during alpha:
 
-- Pin exact tags, such as `v0.3.0-alpha.1`
+- Pin exact tags, such as `v0.3.1-alpha.1`
 - Review release notes before upgrading
 - Test workflow definitions and runtime transitions in a staging environment
 - Avoid relying on undocumented internal classes

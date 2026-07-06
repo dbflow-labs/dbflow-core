@@ -62,12 +62,7 @@ final class DBFlowServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        if (! DbflowRuntime::isEnabled()) {
-            return;
-        }
-
-        $this->registerContainerBindings();
-
+        $this->registerDefinitionManagementBindings();
         $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
 
         if ($this->app->runningInConsole()) {
@@ -85,6 +80,12 @@ final class DBFlowServiceProvider extends ServiceProvider
             ], 'dbflow-migrations');
         }
 
+        if (! DbflowRuntime::isEnabled()) {
+            return;
+        }
+
+        $this->registerRuntimeBindings();
+
         DBFlow::registerAll(
             $this->app->make(WorkflowDefinitionRegistry::class),
             $this->app->make(AssigneeResolverRegistry::class),
@@ -94,21 +95,11 @@ final class DBFlowServiceProvider extends ServiceProvider
         $this->registerCoreActionHandlers();
     }
 
-    private function registerContainerBindings(): void
+    private function registerDefinitionManagementBindings(): void
     {
-        if ($this->app->bound(StartWorkflow::class)) {
+        if ($this->app->bound(WorkflowDefinitionRegistry::class)) {
             return;
         }
-
-        $this->app->singleton(UserResolver::class, function (): UserResolver {
-            $resolverClass = config('dbflow.auth.resolver', ConfigUserResolver::class);
-
-            if (is_string($resolverClass) && class_exists($resolverClass)) {
-                return app($resolverClass);
-            }
-
-            return new ConfigUserResolver;
-        });
 
         $this->app->singleton(
             WorkflowDefinitionRegistry::class,
@@ -136,11 +127,6 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
-            TransitionResolver::class,
-            fn ($app): TransitionResolver => new TransitionResolver($app->make(ExpressionEvaluator::class)),
-        );
-
-        $this->app->singleton(
             WorkflowDefinitionValidator::class,
             static fn (): WorkflowDefinitionValidator => new WorkflowDefinitionValidator,
         );
@@ -151,6 +137,28 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(WorkflowDefinitionRegistry::class),
                 $app->make(WorkflowDefinitionValidator::class),
             ),
+        );
+    }
+
+    private function registerRuntimeBindings(): void
+    {
+        if ($this->app->bound(StartWorkflow::class)) {
+            return;
+        }
+
+        $this->app->singleton(UserResolver::class, function (): UserResolver {
+            $resolverClass = config('dbflow.auth.resolver', ConfigUserResolver::class);
+
+            if (is_string($resolverClass) && class_exists($resolverClass)) {
+                return app($resolverClass);
+            }
+
+            return new ConfigUserResolver;
+        });
+
+        $this->app->singleton(
+            TransitionResolver::class,
+            fn ($app): TransitionResolver => new TransitionResolver($app->make(ExpressionEvaluator::class)),
         );
 
         $this->app->singleton(
