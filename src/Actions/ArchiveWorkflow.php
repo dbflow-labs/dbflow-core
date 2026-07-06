@@ -21,6 +21,9 @@ use DbflowLabs\Core\Enums\WorkflowStatus;
 use DbflowLabs\Core\Models\Workflow;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class ArchiveWorkflow
 {
     public function handle(Workflow $workflow, int|string|null $updatedBy = null): Workflow

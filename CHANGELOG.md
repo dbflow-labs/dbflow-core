@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-rc.1] - Unreleased
+
+### Added
+
+- `UPGRADE-1.0.md` — consolidated upgrade guide from `0.2` through `1.0`.
+- `PublicApiContractTest` — locks `DBFlow` runtime/registration API and `TaskHooks` method signatures.
+- `scripts/check-coverage.php` and CI coverage gates: runtime API scope ≥ 80%, full `src/` ≥ 70%.
+- Composer scripts: `test:coverage`, `coverage:check`.
+
+### Changed
+
+- **API freeze:** runtime facade, `TaskHooks`, `WorkflowTaskQueryService`, and integration events are stable from this release.
+- Definition-management actions are marked `@internal` (draft/builder/sync); not part of the public 1.0 contract.
+
+### Documentation
+
+- README API stability section and RC versioning guidance.
+- Link to `UPGRADE-1.0.md` from README.
+
+### Upgrade notes
+
+- Pin `dbflowlabs/core:1.0.0-rc.1` when validating the frozen API.
+- Pair with `dbflowlabs/filament:1.0.0-rc.1` for coordinated RC testing.
+- Read `UPGRADE-1.0.md` when upgrading from any `0.x` alpha/beta tag.
+
 ## [0.9.0-beta.1] - 2026-07-07
 
 ### Added

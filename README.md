@@ -13,7 +13,7 @@ DBFlow Core lets you add approval workflows, tasks, transitions, rejection flows
 It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific business adapters, Filament UI packages, and the visual workflow Builder are distributed separately.
 
 > [!WARNING]
-> DBFlow Core is currently in alpha. Public APIs and database schema details may change before v1.0.0. Pin exact tags for production experiments.
+> DBFlow Core is in **release candidate** (`1.0.0-rc.x`). The runtime public API is frozen; see [API stability](#api-stability) and [UPGRADE-1.0.md](UPGRADE-1.0.md). Pin exact tags until `1.0.0`.
 
 ## Contents
 
@@ -31,6 +31,7 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 - [Package Boundaries](#package-boundaries)
 - [DBFlow Ecosystem](#dbflow-ecosystem)
 - [Development](#development)
+- [API stability](#api-stability)
 - [Versioning](#versioning)
 - [Support](#support)
 - [License](#license)
@@ -44,7 +45,7 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 | **License** | [MIT](LICENSE) |
 | **Repository** | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core) |
 | **Default branch** | `main` |
-| **Stability** | `Alpha (v0.3.x)` |
+| **Stability** | `Release candidate (1.0.0-rc.x)` |
 | **Author** | Baron Wang <hello@dbflow.dev> |
 | **Laravel compatibility** | `13.x` |
 | **PHP requirements** | `8.3`, `8.4` |
@@ -81,7 +82,9 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 composer require dbflowlabs/core:0.9.0-beta.1
 ```
 
-Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
+> The `1.0.0-rc.1` release candidate is in progress and not yet tagged. Once available, pin it the same way: `composer require dbflowlabs/core:1.0.0-rc.1`. Until then, `0.9.0-beta.1` is the latest installable tag.
+
+Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit prerelease tag (as above) or temporarily allow prereleases in the host `composer.json`.
 
 Releases are tagged on GitHub, for example:
 
@@ -541,7 +544,7 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:0.9.0-beta.1` (or pin the latest alpha tag).
+1. `composer require dbflowlabs/core:0.9.0-beta.1` (or `1.0.0-rc.1` once tagged).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
@@ -616,20 +619,32 @@ Run the test suite:
 composer test
 ```
 
-The CI pipeline validates the package against PHP 8.3 and 8.4 with PHPUnit and architecture compliance checks.
+The CI pipeline validates the package against PHP 8.3 and 8.4 with PHPUnit, PHPStan, and coverage gates (`runtime API ≥ 80%`, `src/ ≥ 70%`).
+
+## API stability
+
+From `1.0.0-rc.1`, these surfaces are frozen until `1.0.0`:
+
+- `DBFlow::start()`, `approve()`, `reject()`, `cancel()`, `reassign()`
+- `DBFlow::register*` boot-time registration methods
+- `TaskHooks` interface methods
+- `WorkflowTaskQueryService` public query API (see `docs/integration/filament.md`)
+- `DbflowLabs\Core\Events\*` event constructor properties
+
+Draft and builder management actions are marked `@internal` and are not covered by the stability guarantee. Use artisan commands or the Filament Builder package instead of binding those classes directly.
+
+Automated contract tests: `EcosystemContractTest`, `PublicApiContractTest`.
 
 ## Versioning
 
-DBFlow Core is currently in active alpha development.
+DBFlow Core is in the **1.0.0 release candidate** phase.
 
-Until a stable `1.0.0` release is reached, public APIs and schema definitions may change as the runtime contract stabilizes.
+Until stable `1.0.0` ships:
 
-Recommended production usage during alpha:
-
-- Pin exact tags, such as `v0.9.0-beta.1`
-- Review release notes before upgrading
+- Pin exact RC tags, such as `1.0.0-rc.1`
+- Review [UPGRADE-1.0.md](UPGRADE-1.0.md) and [CHANGELOG.md](CHANGELOG.md) before upgrading
 - Test workflow definitions and runtime transitions in a staging environment
-- Avoid relying on undocumented internal classes
+- Avoid relying on `@internal` definition-management actions
 
 ## Support
 

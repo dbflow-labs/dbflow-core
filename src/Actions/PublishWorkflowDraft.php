@@ -24,6 +24,9 @@ use DbflowLabs\Core\Validation\WorkflowDefinitionValidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class PublishWorkflowDraft
 {
     public function __construct(

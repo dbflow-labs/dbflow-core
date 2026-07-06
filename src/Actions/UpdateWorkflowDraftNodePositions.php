@@ -20,6 +20,9 @@ namespace DbflowLabs\Core\Actions;
 use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
 use DbflowLabs\Core\Models\Workflow;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class UpdateWorkflowDraftNodePositions
 {
     public function __construct(

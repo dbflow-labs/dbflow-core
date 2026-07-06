@@ -87,8 +87,14 @@ jobs:
             exit 1
           fi
 
-      - name: Run PHPUnit
-        run: composer test -- --coverage-text
+      - name: Run PHPUnit with coverage
+        run: |
+          mkdir -p build
+          composer test:coverage
+
+      - name: Enforce coverage thresholds
+        if: matrix.php == '8.3'
+        run: composer coverage:check
 
       - name: Run PHPStan
         run: composer phpstan

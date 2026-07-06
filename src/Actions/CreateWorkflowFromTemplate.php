@@ -24,6 +24,9 @@ use DbflowLabs\Core\Models\Workflow;
 use DbflowLabs\Core\Templates\WorkflowTemplateRegistry;
 use InvalidArgumentException;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class CreateWorkflowFromTemplate
 {
     public function __construct(

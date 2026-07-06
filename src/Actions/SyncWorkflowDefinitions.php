@@ -25,6 +25,9 @@ use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Validation\WorkflowDefinitionValidator;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class SyncWorkflowDefinitions
 {
     public function __construct(

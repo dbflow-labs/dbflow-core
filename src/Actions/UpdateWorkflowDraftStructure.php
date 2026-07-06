@@ -21,6 +21,9 @@ use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
 use DbflowLabs\Core\Models\Workflow;
 use DbflowLabs\Core\Support\WorkflowBuilderNodeConfigNormalizer;
 
+/**
+ * @internal Definition-management action; not part of the stable 1.0 public API.
+ */
 final class UpdateWorkflowDraftStructure
 {
     public function __construct(
