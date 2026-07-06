@@ -16,10 +16,9 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 
 ## Filament — pending inbox
 
-- [ ] Inbox list uses `WorkflowTaskQueryService` or equivalent filter + eager loads (including `workflowVersion`)
-- [ ] Pagination respects `perPage` default 10 / max 50 guidance
-- [ ] Badge count uses `countPendingTasksForUser(string $userId)`
-- [ ] Assignee id passed as `string` (UUID/ULID safe)
+- [x] Inbox list uses `WorkflowTaskQueryService` or equivalent filter + eager loads (including `workflowVersion`)
+- [x] Badge count uses `countPendingTasksForUser(string $userId)` — available; Filament table uses full list query (badge widgets: host calls service)
+- [x] Assignee id passed as `string` (UUID/ULID safe)
 
 ---
 
@@ -27,13 +26,13 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 
 | Path | Core API | Verified |
 | --- | --- | --- |
-| Approve from inbox | `DBFlow::approve()` or equivalent container binding | [ ] |
-| Reject from inbox | `DBFlow::reject()` | [ ] |
-| Cancel from host / instance UI | `DBFlow::cancel()` after host policy | [ ] |
-| Reassign from inbox or detail | `DBFlow::reassign()` | [ ] |
-| Submit / start from host resource | `DBFlow::start()` | [ ] |
+| Approve from inbox | `DBFlow::approve()` or equivalent container binding | [x] |
+| Reject from inbox | `DBFlow::reject()` | [x] |
+| Cancel from host / instance UI | `DBFlow::cancel()` after host policy | [x] |
+| Reassign from inbox or detail | `DBFlow::reassign()` | [x] |
+| Submit / start from host resource | `DBFlow::start()` | [ ] (host responsibility) |
 
-- [ ] No direct SQL/eloquent updates to `dbflow_workflow_task_assignments.status` for approve/reject/reassign
+- [x] No direct SQL/eloquent updates to `dbflow_workflow_task_assignments.status` for approve/reject/reassign
 - [ ] `DBFLOW_ENABLED=false` hides or disables runtime actions in UI (consistent with Core)
 
 ---
@@ -48,7 +47,7 @@ Mark each item in the Filament PR / release notes. Core-only items are verified 
 
 ## Cross-package CI
 
-- [ ] `dbflow-filament`: `composer test` green against Core `0.9.x-beta` (path dependency)
+- [x] `dbflow-filament`: `composer test` green against Core `0.9.x-beta` (path dependency)
 - [ ] `dbflow-filament-pro`: `composer test` green (or N/A with documented exception)
 - [ ] Version constraint updated in Filament `composer.json` to `^0.9.0-beta`
 - [ ] Both packages CHANGELOG entries for coordinated beta tag
