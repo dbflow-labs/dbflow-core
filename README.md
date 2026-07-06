@@ -78,7 +78,7 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 ### Packagist Installation
 
 ```bash
-composer require dbflowlabs/core:0.3.1-alpha.1
+composer require dbflowlabs/core:0.4.0-alpha.1
 ```
 
 Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit alpha tag (as above) or temporarily allow prereleases in the host `composer.json`.
@@ -86,7 +86,7 @@ Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If C
 Releases are tagged on GitHub, for example:
 
 ```text
-v0.3.1-alpha.1
+v0.4.0-alpha.1
 ```
 
 ## Laravel Integration
@@ -502,7 +502,7 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:0.3.1-alpha.1` (or pin the latest alpha tag).
+1. `composer require dbflowlabs/core:0.4.0-alpha.1` (or pin the latest alpha tag).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
@@ -578,7 +578,7 @@ Until a stable `1.0.0` release is reached, public APIs and schema definitions ma
 
 Recommended production usage during alpha:
 
-- Pin exact tags, such as `v0.3.1-alpha.1`
+- Pin exact tags, such as `v0.4.0-alpha.1`
 - Review release notes before upgrading
 - Test workflow definitions and runtime transitions in a staging environment
 - Avoid relying on undocumented internal classes
