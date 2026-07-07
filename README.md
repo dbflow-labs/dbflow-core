@@ -62,6 +62,7 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 - **Approval modes** — runtime support for common approval strategies.
 - **Transition handling** — controlled movement between workflow nodes.
 - **Append-only audit logs** — historical workflow activity records for traceability.
+- **Action node failure handling** — `ActionFailed` events and audit entries when handlers throw; optional `stop_on_error` to abort traversal.
 - **Extension points** — assignee resolvers, workflow hooks, condition handling, and action handlers.
 
 > [!NOTE]
@@ -143,7 +144,12 @@ return [
     'auth' => [
         'model' => env('DBFLOW_AUTH_MODEL'),
         'guard' => env('DBFLOW_AUTH_GUARD'),
+        'table' => env('DBFLOW_AUTH_TABLE'),
+        'connection' => env('DBFLOW_AUTH_CONNECTION'),
         'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
+    ],
+    'expression' => [
+        'strict' => env('DBFLOW_EXPRESSION_STRICT', false),
     ],
     'visual_builder_enabled' => env('DBFLOW_VISUAL_BUILDER_ENABLED', false),
 ];
@@ -155,6 +161,7 @@ return [
 'auth' => [
     'model' => env('DBFLOW_AUTH_MODEL', 'App\\Models\\User'),
     'guard' => env('DBFLOW_AUTH_GUARD', 'web'),
+    'table' => env('DBFLOW_AUTH_TABLE', 'users'),
     'resolver' => DbflowLabs\Core\Support\ConfigUserResolver::class,
 ],
 ```
@@ -165,7 +172,6 @@ Recommended `.env` for that host example:
 DBFLOW_ENABLED=true
 DBFLOW_BINDING_MODE=code
 DBFLOW_AUTH_MODEL=App\Models\User
-DBFLOW_AUTH_MODEL=App\\Models\\User
 DBFLOW_AUTH_TABLE=users
 DBFLOW_AUTH_GUARD=web
 DBFLOW_EXPRESSION_STRICT=false
@@ -320,7 +326,7 @@ $instance = DBFlow::start(
 ```
 
 > [!NOTE]
-> **Metadata contract (alpha):** Core persists the entire `$metadata` array on the workflow instance. It does not assign special meaning to keys such as `submit_comment` — naming conventions are **host-defined**. For condition nodes, prefer `WorkflowContextInterface::getWorkflowVariables()`; otherwise pass `metadata['variables']`.
+> **Metadata contract (stable):** Core persists the entire `$metadata` array on the workflow instance. It does not assign special meaning to keys such as `submit_comment` — naming conventions are **host-defined**. For condition nodes, prefer `WorkflowContextInterface::getWorkflowVariables()`; otherwise pass `metadata['variables']`.
 
 ### 5. Approve or Reject a Task
 
@@ -449,9 +455,37 @@ $order->workflowLogs('refund_approval');
 
 Use these helpers in host guards (for example, disable a Filament **Confirm** action while `hasRunningWorkflow()` is true).
 
+### 10. Action Node Failures
+
+Action nodes execute registered `ActionHandler` implementations during traversal. When a handler throws:
+
+**Default (fire-and-forget):**
+
+- Core writes `WorkflowLogEvent::ActionFailed` to the audit log
+- Core dispatches `DbflowLabs\Core\Events\ActionFailed` with the instance, node, and exception
+- Traversal **continues** to the next node so non-critical automations do not block approval flow
+
+**Opt-in abort (`stop_on_error: true`):**
+
+```json
+{
+  "type": "action",
+  "config": {
+    "action_key": "post_to_ledger",
+    "stop_on_error": true
+  }
+}
+```
+
+- Core still logs and dispatches `ActionFailed`
+- Core then throws `ActionExecutionFailedException`, stopping traversal before downstream nodes run
+- Use for side effects that must succeed before the workflow advances (for example ERP posting)
+
+Set `DBFLOW_EXPRESSION_STRICT=true` when condition nodes should reject invalid or missing variables instead of treating them as false.
+
 ## Runtime API Summary
 
-Use `DbflowLabs\Core\DBFlow` as the single runtime entry point during alpha.
+Use `DbflowLabs\Core\DBFlow` as the single runtime entry point for workflow operations.
 
 | Method | Purpose | Returns |
 | --- | --- | --- |
@@ -471,7 +505,7 @@ Registration helpers are usually called from a host service provider. Runtime ac
 
 Approval nodes declare assignees under `config.assignees`. The schema lists four types; **open-core runtime support differs**:
 
-| `assignees.type` | Supported at runtime (alpha) | Notes |
+| `assignees.type` | Supported at runtime | Notes |
 | --- | --- | --- |
 | `user` | Yes | Single user id in `value` (string or int). Fine for demos; use `callback` in production. |
 | `callback` | Yes | `callback` (or `value`) must match a key registered via `DBFlow::registerAssigneeResolver()`. |
@@ -582,7 +616,7 @@ DBFlow is designed as a layered ecosystem:
 
 Core runs the workflow. Filament packages provide user interfaces. Host applications provide business adapters.
 
-### Filament integration contract (0.9-beta+)
+### Filament integration contract (1.0+)
 
 Cross-package contracts for pending-task queries, runtime actions, events, and version alignment are documented in:
 
