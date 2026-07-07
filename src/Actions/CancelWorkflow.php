@@ -50,6 +50,12 @@ final class CancelWorkflow
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            // Intentional silent no-op on an already-terminal instance: cancel() is part of the
+            // frozen 1.0 public API (see docs/integration/filament.md), so this idempotent
+            // behavior cannot change without a breaking release. Hosts that need to distinguish
+            // "cancelled now" from "was already terminal" should check
+            // $instance->status->isTerminal() before calling cancel(). See README "Cancel a
+            // Running Workflow" section.
             if ($lockedInstance->status?->isTerminal() ?? false) {
                 return $lockedInstance->refresh();
             }

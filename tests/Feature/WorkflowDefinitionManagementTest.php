@@ -24,6 +24,7 @@ use DbflowLabs\Core\Actions\CreateWorkflowFromTemplate;
 use DbflowLabs\Core\Actions\DeleteWorkflow;
 use DbflowLabs\Core\Actions\DisableWorkflow;
 use DbflowLabs\Core\Actions\EnableWorkflow;
+use DbflowLabs\Core\Actions\PublishWorkflowDraft;
 use DbflowLabs\Core\Actions\SaveWorkflowDraft;
 use DbflowLabs\Core\Actions\UpdateWorkflowDraftNodePositions;
 use DbflowLabs\Core\Actions\UpdateWorkflowDraftStructure;
@@ -33,6 +34,7 @@ use DbflowLabs\Core\Exceptions\WorkflowInvalidStateException;
 use DbflowLabs\Core\Exceptions\WorkflowKeyAlreadyExistsException;
 use DbflowLabs\Core\Exceptions\WorkflowTemplateNotFoundException;
 use DbflowLabs\Core\Models\Workflow;
+use DbflowLabs\Core\Models\WorkflowVersion;
 use DbflowLabs\Core\Support\WorkflowBuilderNodeFactory;
 use DbflowLabs\Core\Tests\Concerns\BuildsMinimalPublishedWorkflow;
 use DbflowLabs\Core\Tests\Fixtures\ContextTestSubject;
@@ -56,6 +58,40 @@ final class WorkflowDefinitionManagementTest extends TestCase
         $this->assertSame('Renamed Draft Flow', $saved->draftDefinition()[WorkflowDefinitionSchema::FIELD_NAME]);
         $this->assertSame('42', $saved->draft_updated_by);
         $this->assertNull($saved->draft_validation_errors);
+    }
+
+    #[Test]
+    public function publishing_a_new_draft_keeps_is_active_consistent_with_current_version_id(): void
+    {
+        $workflow = $this->createMinimalPublishedWorkflow('is_active_flow', 'Is Active Flow');
+
+        $firstVersion = WorkflowVersion::query()
+            ->where('workflow_id', $workflow->getKey())
+            ->where('is_active', true)
+            ->sole();
+
+        $this->assertSame($workflow->fresh()->current_version_id, $firstVersion->getKey());
+
+        $definition = $workflow->draftDefinition();
+        $definition[WorkflowDefinitionSchema::FIELD_NAME] = 'Is Active Flow v2';
+        app(SaveWorkflowDraft::class)->handle($workflow, $definition, '1');
+
+        $secondVersion = app(PublishWorkflowDraft::class)->handle($workflow->fresh(), '1');
+
+        $workflow = $workflow->fresh();
+        $this->assertSame($workflow->current_version_id, $secondVersion->getKey());
+
+        // is_active must track current_version_id 1:1 — Workflow::activeVersion() and
+        // `dbflow:validate --source=database` both key off is_active, not current_version_id.
+        $activeVersions = WorkflowVersion::query()
+            ->where('workflow_id', $workflow->getKey())
+            ->where('is_active', true)
+            ->get();
+
+        $this->assertCount(1, $activeVersions);
+        $this->assertSame($secondVersion->getKey(), $activeVersions->first()->getKey());
+        $this->assertSame($secondVersion->getKey(), $workflow->activeVersion?->getKey());
+        $this->assertFalse($firstVersion->fresh()->is_active);
     }
 
     #[Test]

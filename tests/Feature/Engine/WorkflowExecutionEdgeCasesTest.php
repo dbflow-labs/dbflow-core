@@ -135,6 +135,61 @@ final class WorkflowExecutionEdgeCasesTest extends TestCase
     }
 
     #[Test]
+    public function approving_a_task_on_a_non_running_instance_throws_not_pending(): void
+    {
+        $users = $this->seedEngineUsers();
+        $definition = $this->loadBlueprintFixture('conditional_routing');
+        $definition = $this->patchAssigneeUserId($definition, 'high_value_review', (int) $users['first']->getKey());
+        $this->publishDefinition($definition);
+
+        $subject = ContextTestSubject::query()
+            ->create(['reference_code' => 'EDGE-INSTANCE-STATUS-001'])
+            ->withWorkflowVariables(['amount' => 15000]);
+
+        $instance = DBFlow::start('conditional_routing', $subject, $users['first']->getKey());
+
+        $task = WorkflowTask::query()
+            ->where('workflow_instance_id', $instance->getKey())
+            ->where('status', WorkflowTaskStatus::Pending)
+            ->firstOrFail();
+
+        // Simulate an instance forced into a terminal state through an out-of-band update while
+        // its task row is still (inconsistently) pending; approve/reject must not trust the task
+        // status alone.
+        $instance->forceFill(['status' => WorkflowInstanceStatus::Cancelled])->save();
+
+        $this->expectException(TaskNotPendingException::class);
+
+        DBFlow::approve($task, $users['first']->getKey());
+    }
+
+    #[Test]
+    public function rejecting_a_task_on_a_non_running_instance_throws_not_pending(): void
+    {
+        $users = $this->seedEngineUsers();
+        $definition = $this->loadBlueprintFixture('conditional_routing');
+        $definition = $this->patchAssigneeUserId($definition, 'high_value_review', (int) $users['first']->getKey());
+        $this->publishDefinition($definition);
+
+        $subject = ContextTestSubject::query()
+            ->create(['reference_code' => 'EDGE-INSTANCE-STATUS-002'])
+            ->withWorkflowVariables(['amount' => 15000]);
+
+        $instance = DBFlow::start('conditional_routing', $subject, $users['first']->getKey());
+
+        $task = WorkflowTask::query()
+            ->where('workflow_instance_id', $instance->getKey())
+            ->where('status', WorkflowTaskStatus::Pending)
+            ->firstOrFail();
+
+        $instance->forceFill(['status' => WorkflowInstanceStatus::Cancelled])->save();
+
+        $this->expectException(TaskNotPendingException::class);
+
+        DBFlow::reject($task, $users['first']->getKey());
+    }
+
+    #[Test]
     public function reject_end_strategy_terminates_instance(): void
     {
         $users = $this->seedEngineUsers();

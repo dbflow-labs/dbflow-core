@@ -23,6 +23,8 @@ use DbflowLabs\Core\Definitions\Nodes\ActionNode;
 use DbflowLabs\Core\Definitions\Nodes\ApprovalNode;
 use DbflowLabs\Core\Definitions\Nodes\EndNode;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
+use DbflowLabs\Core\Events\ActionFailed as ActionFailedEvent;
+use DbflowLabs\Core\Exceptions\ActionExecutionFailedException;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Exceptions\PremiumFeatureMissingException;
 use DbflowLabs\Core\Models\WorkflowInstance;
@@ -153,8 +155,15 @@ final class WorkflowNodeTraverser
                     'node_key' => $nodeKey,
                     'action_key' => $actionKey,
                     'error' => $e->getMessage(),
+                    'stop_on_error' => $node->stopOnError(),
                 ],
             );
+
+            event(new ActionFailedEvent($instance, $node, $e));
+
+            if ($node->stopOnError()) {
+                throw new ActionExecutionFailedException($actionKey, $nodeKey, $e);
+            }
         }
     }
 }

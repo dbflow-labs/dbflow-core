@@ -53,10 +53,21 @@ final class PublishWorkflowDraft
                 ->where('workflow_id', $workflow->getKey())
                 ->max('version') ?? 0);
 
+            // Keep the is_active flag consistent with current_version_id (both mark "the
+            // published version"). SyncWorkflowDefinitions already maintains is_active for
+            // registry-sourced workflows; without this, UI-builder-published workflows would
+            // never have an is_active version, breaking Workflow::activeVersion() and the
+            // `dbflow:validate --source=database` command for this publish path.
+            WorkflowVersion::query()
+                ->where('workflow_id', $workflow->getKey())
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
             $versionAttributes = [
                 'workflow_id' => $workflow->getKey(),
                 'version' => $maxVersion + 1,
                 'definition' => $definition,
+                'is_active' => true,
                 'published_at' => now(),
             ];
 

@@ -80,6 +80,10 @@ final class ApproveTask
                 throw new TaskNotPendingException('Task is not pending.');
             }
 
+            if ($instance->status !== WorkflowInstanceStatus::Running) {
+                throw new TaskNotPendingException('Workflow instance is not running.');
+            }
+
             $actorUserId = $this->resolveActorUserId($actor);
             $approvalMode = $lockedTask->approval_mode ?? ApprovalMode::Any;
 

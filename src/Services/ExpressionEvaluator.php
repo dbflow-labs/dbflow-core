@@ -29,6 +29,11 @@ use Throwable;
  *
  * - No custom functions registered (no direct PHP function access);
  * - Variables only from the caller-supplied $variables whitelist; no global state exposed;
+ * - Object variables are stripped before evaluation (see sanitizeVariables()) so a workflow
+ *   definition can never call a method or read a property on a host object — condition
+ *   expressions are meant to compare plain business values (numbers, strings, booleans,
+ *   arrays), not to reach into model behavior. This matters because workflow definitions can
+ *   be authored via the visual builder, which is a lower-trust surface than PHP code;
  * - All exceptions (syntax errors, missing variables, etc.) are caught and silently return false without interrupting the flow.
  *
  * Supported syntax examples:
@@ -62,7 +67,7 @@ final class ExpressionEvaluator
         }
 
         try {
-            $result = $this->expressionLanguage->evaluate($expression, $variables);
+            $result = $this->expressionLanguage->evaluate($expression, self::sanitizeVariables($variables));
 
             return (bool) $result;
         } catch (Throwable $e) {
@@ -100,5 +105,28 @@ final class ExpressionEvaluator
     private function isStrict(): bool
     {
         return (bool) config('dbflow.expression.strict', false);
+    }
+
+    /**
+     * Recursively drops object values (and objects nested inside arrays) from the variable
+     * context so expressions cannot invoke methods or read properties on host models/services.
+     * Scalars, null, and arrays of scalars pass through unchanged.
+     *
+     * @param  array<string, mixed>  $variables
+     * @return array<string, mixed>
+     */
+    private static function sanitizeVariables(array $variables): array
+    {
+        $sanitized = [];
+
+        foreach ($variables as $key => $value) {
+            if (is_object($value)) {
+                continue;
+            }
+
+            $sanitized[$key] = is_array($value) ? self::sanitizeVariables($value) : $value;
+        }
+
+        return $sanitized;
     }
 }

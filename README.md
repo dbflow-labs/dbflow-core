@@ -298,7 +298,7 @@ $instance = $refundRequest->startWorkflow('refund_approval');
 // equivalent to DBFlow::start('refund_approval', $refundRequest, auth()->user());
 ```
 
-When `binding_mode` is `ui`, matching published workflows with a `model_type` binding may auto-start on `Model::created`. ERP-style hosts usually keep `code` and trigger from business actions (submit, confirm, etc.).
+When `binding_mode` is `ui`, matching published workflows with a `model_type` binding may auto-start on `Model::created`. ERP-style hosts usually keep `code` and trigger from business actions (submit, confirm, etc.). Auto-start runs inside the `created` event, not the model's own persistence transaction; if a matching workflow fails to start (e.g. a misconfigured assignee resolver), the exception is reported via `report()` and swallowed so the model is still created and other matching workflows still get a chance to start — it does not roll back model creation or block sibling workflows.
 
 ### 4. Start a Workflow
 
@@ -371,6 +371,7 @@ DBFlow::cancel(
 
 - **Does not enforce who may cancel.** Core does not check `started_by_user_id` or approver roles. Compare `instance->started_by_user_id` (or your own policy) in the host **before** calling `cancel()`.
 - **Does not define post-cancel business rules.** Whether a cancelled workflow blocks `confirm`, `ship`, `post`, etc. is entirely a **host responsibility** (see [Host Responsibilities](#host-responsibilities)).
+- **Does not error when called on an already-terminal instance.** `cancel()` on a `cancelled`/`approved`/`rejected` instance is a silent no-op: it returns the instance unchanged and writes no additional log or event (verified by `CancelWorkflowTest::cancel_on_terminal_instance_is_idempotent_and_does_not_duplicate_logs`, part of the frozen 1.0 API). If the host needs to distinguish "I just cancelled it" from "it was already terminal", check `$instance->status->isTerminal()` **before** calling `cancel()`.
 
 | Terminal status | Typical host `canConfirm` strategy (examples only) |
 | --- | --- |

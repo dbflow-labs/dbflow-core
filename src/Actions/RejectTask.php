@@ -42,6 +42,7 @@ use DbflowLabs\Core\Support\ApprovalNodeAssigneeResolver;
 use DbflowLabs\Core\Support\ResolvesActorUserId;
 use DbflowLabs\Core\Support\ResolvesTaskHooks;
 use DbflowLabs\Core\Support\ResolvesWorkflowHooks;
+use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use Illuminate\Support\Facades\DB;
 
 final class RejectTask
@@ -53,6 +54,7 @@ final class RejectTask
     public function __construct(
         private readonly TransitionResolver $transitionResolver,
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
+        private readonly TimeoutDueAtResolver $timeoutDueAtResolver,
         private readonly WorkflowLogger $logger,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
         private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
@@ -80,6 +82,10 @@ final class RejectTask
 
             if ($lockedTask->status !== WorkflowTaskStatus::Pending) {
                 throw new TaskNotPendingException('Task is not pending.');
+            }
+
+            if ($instance->status !== WorkflowInstanceStatus::Running) {
+                throw new TaskNotPendingException('Workflow instance is not running.');
             }
 
             $actorUserId = $this->resolveActorUserId($actor);
@@ -131,6 +137,10 @@ final class RejectTask
 
             $this->createRollbackTask($instance, $rollbackNode, $actor, $nextIteration);
 
+            // Rollback keeps the instance `running` (it is not a terminal outcome), so unlike
+            // terminateWorkflow() this intentionally does not dispatch WorkflowRejected or call
+            // onRejected(): both are documented as terminal, instance-level signals. The audit
+            // trail below still records the rollback for observability.
             $this->logger->log(
                 $instance,
                 WorkflowLogEvent::WorkflowRejected,
@@ -140,12 +150,9 @@ final class RejectTask
                     'strategy' => $strategy->value,
                     'rollback_node_key' => $rollbackNodeKey,
                     'iteration' => $nextIteration,
+                    'terminal' => false,
                 ],
             );
-
-            $this->hooksForInstance($this->hooksRegistry, $instance->refresh())->onRejected($instance->refresh());
-
-            event(new WorkflowRejected($instance->refresh()));
 
             return $instance->refresh();
         });
@@ -238,6 +245,7 @@ final class RejectTask
             'node_name' => $rollbackNode->name(),
             'status' => WorkflowTaskStatus::Pending,
             'approval_mode' => $approvalMode,
+            'due_at' => $this->timeoutDueAtResolver->resolveDueAt($rollbackNode->timeoutDueIn()),
         ]);
 
         $this->createAssignments($rollbackTask, $approvalMode, $assigneeUserIds);
@@ -299,7 +307,7 @@ final class RejectTask
             WorkflowLogEvent::WorkflowRejected,
             actor: $actor,
             comment: $comment,
-            payload: ['strategy' => $strategy->value],
+            payload: ['strategy' => $strategy->value, 'terminal' => true],
         );
 
         $this->hooksForInstance($this->hooksRegistry, $instance->refresh())->onRejected($instance->refresh());

@@ -27,6 +27,7 @@ use DbflowLabs\Core\Support\DbflowRuntime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Throwable;
 
 trait HasWorkflow
 {
@@ -44,7 +45,15 @@ trait HasWorkflow
                 ->get()
                 ->filter(static fn (Workflow $workflow): bool => $workflow->canStartNewInstances())
                 ->each(static function (Workflow $workflow) use ($model): void {
-                    DBFlow::start($workflow->key, $model, DbflowAuth::currentUser());
+                    // Auto-start runs inside the model's own `created` event, so a failure here
+                    // (e.g. a misconfigured workflow definition) must not bubble up and abort the
+                    // host's model-creation flow/transaction. Each workflow is isolated so that one
+                    // bad definition does not prevent other matching workflows from starting.
+                    try {
+                        DBFlow::start($workflow->key, $model, DbflowAuth::currentUser());
+                    } catch (Throwable $e) {
+                        report($e);
+                    }
                 });
         });
     }

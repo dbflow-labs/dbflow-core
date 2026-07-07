@@ -21,6 +21,7 @@ use DbflowLabs\Core\Definitions\Blueprint;
 use DbflowLabs\Core\Definitions\Contracts\WorkflowNodeInterface;
 use DbflowLabs\Core\Definitions\Nodes\ConditionNode;
 use DbflowLabs\Core\Definitions\Nodes\StartNode;
+use DbflowLabs\Core\Definitions\Transition;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 
 final class TransitionResolver
@@ -120,7 +121,9 @@ final class TransitionResolver
         string $fromNodeKey,
         string $event,
     ): ?string {
-        foreach ($blueprint->transitionsFrom($fromNodeKey) as $transition) {
+        $transitions = self::sortByPriority($blueprint->transitionsFrom($fromNodeKey));
+
+        foreach ($transitions as $transition) {
             $transitionEvent = $transition->event();
 
             if ($transitionEvent !== null && $transitionEvent !== $event) {
@@ -138,6 +141,30 @@ final class TransitionResolver
     }
 
     /**
+     * Orders outgoing transitions so Transition.priority controls evaluation order: lower
+     * numbers are evaluated first (consistent with sequential assignment ordering elsewhere
+     * in the engine). Transitions without an explicit priority are evaluated last, keeping
+     * their original relative order (stable sort) so unpriority definitions keep working
+     * exactly as before.
+     *
+     * @param  list<Transition>  $transitions
+     * @return list<Transition>
+     */
+    private static function sortByPriority(array $transitions): array
+    {
+        $indexed = array_values($transitions);
+
+        usort($indexed, static function ($a, $b): int {
+            $priorityA = $a->priority() ?? PHP_INT_MAX;
+            $priorityB = $b->priority() ?? PHP_INT_MAX;
+
+            return $priorityA <=> $priorityB;
+        });
+
+        return $indexed;
+    }
+
+    /**
      * @param  array<string, mixed>  $variables
      */
     private function evaluateConditionGateway(
@@ -147,7 +174,7 @@ final class TransitionResolver
     ): ?string {
         $defaultTarget = null;
 
-        foreach ($blueprint->transitionsFrom($conditionNode->key()) as $transition) {
+        foreach (self::sortByPriority($blueprint->transitionsFrom($conditionNode->key())) as $transition) {
             $to = $transition->to();
 
             if ($to === '') {

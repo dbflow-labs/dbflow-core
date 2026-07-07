@@ -21,13 +21,18 @@ use DbflowLabs\Core\DBFlow;
 use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
+use DbflowLabs\Core\Events\ActionFailed;
+use DbflowLabs\Core\Exceptions\ActionExecutionFailedException;
 use DbflowLabs\Core\Models\WorkflowLog;
 use DbflowLabs\Core\Models\WorkflowTask;
+use DbflowLabs\Core\Support\ActionManager;
 use DbflowLabs\Core\Tests\Concerns\LoadsBlueprintFixtures;
 use DbflowLabs\Core\Tests\Concerns\RegistersEngineTestResources;
 use DbflowLabs\Core\Tests\Fixtures\ContextTestSubject;
 use DbflowLabs\Core\Tests\Fixtures\RecordingActionHandler;
+use DbflowLabs\Core\Tests\Fixtures\ThrowingActionHandler;
 use DbflowLabs\Core\Tests\TestCase;
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
 
 final class ActionAutomationFlowTest extends TestCase
@@ -99,6 +104,68 @@ final class ActionAutomationFlowTest extends TestCase
         $instance->refresh();
         $this->assertSame(WorkflowInstanceStatus::Approved, $instance->status);
         $this->assertSame('end_manual', $instance->current_node_key);
+    }
+
+    #[Test]
+    public function failing_action_node_dispatches_action_failed_and_workflow_continues_by_default(): void
+    {
+        Event::fake([ActionFailed::class]);
+
+        $users = $this->seedEngineUsers();
+        ThrowingActionHandler::reset();
+        app(ActionManager::class)->register('throwing_action', ThrowingActionHandler::class);
+
+        $definition = $this->loadBlueprintFixture('action_automation');
+        $definition['nodes'][1]['config']['action_key'] = 'throwing_action';
+        $definition = $this->patchAssigneeUserId($definition, 'compliance_review', (int) $users['first']->getKey());
+        $this->publishDefinition($definition);
+
+        $subject = ContextTestSubject::query()
+            ->create(['reference_code' => 'ACT-FAIL-001'])
+            ->withWorkflowVariables(['requires_review' => false]);
+
+        $instance = DBFlow::start('action_automation', $subject, $users['first']->getKey());
+
+        $this->assertSame(1, ThrowingActionHandler::$callCount);
+        $this->assertSame(WorkflowInstanceStatus::Approved, $instance->status);
+        $this->assertSame('end_auto', $instance->current_node_key);
+
+        $this->assertTrue(
+            WorkflowLog::query()
+                ->where('workflow_instance_id', $instance->getKey())
+                ->where('event', WorkflowLogEvent::ActionFailed)
+                ->exists(),
+        );
+
+        Event::assertDispatched(ActionFailed::class);
+    }
+
+    #[Test]
+    public function stop_on_error_action_node_aborts_traversal_instead_of_continuing(): void
+    {
+        Event::fake([ActionFailed::class]);
+
+        $users = $this->seedEngineUsers();
+        ThrowingActionHandler::reset();
+        app(ActionManager::class)->register('throwing_action', ThrowingActionHandler::class);
+
+        $definition = $this->loadBlueprintFixture('action_automation');
+        $definition['nodes'][1]['config']['action_key'] = 'throwing_action';
+        $definition['nodes'][1]['config']['stop_on_error'] = true;
+        $definition = $this->patchAssigneeUserId($definition, 'compliance_review', (int) $users['first']->getKey());
+        $this->publishDefinition($definition);
+
+        $subject = ContextTestSubject::query()
+            ->create(['reference_code' => 'ACT-STOP-001'])
+            ->withWorkflowVariables(['requires_review' => false]);
+
+        $this->expectException(ActionExecutionFailedException::class);
+
+        try {
+            DBFlow::start('action_automation', $subject, $users['first']->getKey());
+        } finally {
+            Event::assertDispatched(ActionFailed::class);
+        }
     }
 
     /**

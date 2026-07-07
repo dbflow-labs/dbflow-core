@@ -82,6 +82,70 @@ final class ConditionRoutingContractTest extends TestCase
     }
 
     #[Test]
+    public function transition_priority_controls_evaluation_order_for_matching_conditions(): void
+    {
+        $definition = [
+            'key' => 'priority_routing_flow',
+            'name' => 'Priority Routing Flow',
+            'nodes' => [
+                ['key' => 'start', 'type' => 'start', 'name' => 'Start'],
+                [
+                    'key' => 'amount_gate',
+                    'type' => 'condition',
+                    'name' => 'Amount Gate',
+                ],
+                ['key' => 'end_low_priority', 'type' => 'end', 'name' => 'Low Priority Match'],
+                ['key' => 'end_high_priority', 'type' => 'end', 'name' => 'High Priority Match'],
+            ],
+            'transitions' => [
+                ['from' => 'start', 'to' => 'amount_gate'],
+                // Declared first but with a higher (later) priority number; the resolver must
+                // still prefer the lower-numbered transition declared below.
+                ['from' => 'amount_gate', 'to' => 'end_low_priority', 'condition' => 'amount > 0', 'priority' => 10],
+                ['from' => 'amount_gate', 'to' => 'end_high_priority', 'condition' => 'amount > 0', 'priority' => 1],
+            ],
+        ];
+
+        $blueprint = Blueprint::fromArray($definition);
+        $resolver = new TransitionResolver(new ExpressionEvaluator);
+
+        $next = $resolver->nextNode($blueprint, 'start', variables: ['amount' => 100]);
+
+        $this->assertSame('end_high_priority', $next?->key());
+    }
+
+    #[Test]
+    public function transitions_without_priority_keep_declaration_order(): void
+    {
+        $definition = [
+            'key' => 'no_priority_routing_flow',
+            'name' => 'No Priority Routing Flow',
+            'nodes' => [
+                ['key' => 'start', 'type' => 'start', 'name' => 'Start'],
+                [
+                    'key' => 'amount_gate',
+                    'type' => 'condition',
+                    'name' => 'Amount Gate',
+                ],
+                ['key' => 'end_first', 'type' => 'end', 'name' => 'First Declared'],
+                ['key' => 'end_second', 'type' => 'end', 'name' => 'Second Declared'],
+            ],
+            'transitions' => [
+                ['from' => 'start', 'to' => 'amount_gate'],
+                ['from' => 'amount_gate', 'to' => 'end_first', 'condition' => 'amount > 0'],
+                ['from' => 'amount_gate', 'to' => 'end_second', 'condition' => 'amount > 0'],
+            ],
+        ];
+
+        $blueprint = Blueprint::fromArray($definition);
+        $resolver = new TransitionResolver(new ExpressionEvaluator);
+
+        $next = $resolver->nextNode($blueprint, 'start', variables: ['amount' => 100]);
+
+        $this->assertSame('end_first', $next?->key());
+    }
+
+    #[Test]
     public function metadata_does_not_change_condition_routing(): void
     {
         $definition = $this->transitionConditionDefinition();

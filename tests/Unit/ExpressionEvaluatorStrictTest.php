@@ -65,4 +65,57 @@ final class ExpressionEvaluatorStrictTest extends TestCase
 
         $evaluator->validateSyntax('amount >');
     }
+
+    #[Test]
+    public function object_variables_cannot_be_used_to_call_methods(): void
+    {
+        config(['dbflow.expression.strict' => false]);
+
+        $evaluator = new ExpressionEvaluator;
+        $object = new class
+        {
+            public string $secret = 'leaked';
+
+            public function dangerous(): string
+            {
+                return 'called';
+            }
+        };
+
+        // Object was stripped from the variable context, so both member access forms resolve
+        // to an undefined variable and degrade to false in permissive mode instead of invoking
+        // the method or reading the property.
+        $this->assertFalse($evaluator->evaluate('model.dangerous()', ['model' => $object]));
+        $this->assertFalse($evaluator->evaluate('model.secret == "leaked"', ['model' => $object]));
+    }
+
+    #[Test]
+    public function object_variables_nested_in_arrays_are_also_stripped(): void
+    {
+        config(['dbflow.expression.strict' => false]);
+
+        $evaluator = new ExpressionEvaluator;
+        $object = new class
+        {
+            public function dangerous(): string
+            {
+                return 'called';
+            }
+        };
+
+        $this->assertFalse($evaluator->evaluate('context.model.dangerous()', [
+            'context' => ['model' => $object, 'amount' => 100],
+        ]));
+    }
+
+    #[Test]
+    public function plain_scalar_and_array_variables_still_evaluate_normally(): void
+    {
+        $evaluator = new ExpressionEvaluator;
+
+        $this->assertTrue($evaluator->evaluate('amount > 1000 and status == "approved"', [
+            'amount' => 1500,
+            'status' => 'approved',
+        ]));
+    }
 }

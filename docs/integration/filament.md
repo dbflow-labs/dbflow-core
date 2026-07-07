@@ -124,6 +124,12 @@ All events use `Dispatchable` and `SerializesModels`. Public constructor propert
 | `TaskRejected` | `WorkflowTask $task`, `WorkflowInstance $instance`, `mixed $actor = null`, `?string $comment = null` | User/system reject |
 | `TaskReassigned` | `WorkflowTask $task`, `WorkflowInstance $instance`, `WorkflowTaskAssignment $previousAssignment`, `WorkflowTaskAssignment $newAssignment`, `mixed $actor = null`, `?string $comment = null` | Successful reassign |
 | `TaskTimedOut` | `WorkflowTask $task`, `WorkflowInstance $instance`, `array $payload = []` | First timeout audit per task |
+| `ActionFailed` | `WorkflowInstance $instance`, `ActionNode $node`, `Throwable $exception` | Action node handler threw (added post-1.0.0-rc.1, additive) |
+
+`ActionFailed` fires whenever an `ActionHandler::execute()` call throws. By default the workflow keeps
+traversing after logging `WorkflowLogEvent::ActionFailed` and dispatching this event (fire-and-forget
+actions must not silently block approvals). Set `config.stop_on_error: true` on the action node to make
+traversal abort with `ActionExecutionFailedException` instead.
 
 ### `TaskTimedOut` payload keys
 

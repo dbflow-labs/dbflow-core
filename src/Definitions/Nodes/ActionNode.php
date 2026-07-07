@@ -32,6 +32,7 @@ final class ActionNode extends AbstractWorkflowNode
         private readonly string $actionKey,
         private readonly ?array $payload = null,
         private readonly ?string $callback = null,
+        private readonly bool $stopOnError = false,
         ?array $position = null,
         array $metadata = [],
     ) {
@@ -62,6 +63,15 @@ final class ActionNode extends AbstractWorkflowNode
     }
 
     /**
+     * When true, a handler exception aborts traversal (via ActionExecutionFailedException)
+     * instead of being logged as ActionFailed and swallowed so the workflow can proceed.
+     */
+    public function stopOnError(): bool
+    {
+        return $this->stopOnError;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
@@ -83,12 +93,15 @@ final class ActionNode extends AbstractWorkflowNode
             ? $config['callback']
             : null;
 
+        $stopOnError = isset($config['stop_on_error']) && $config['stop_on_error'] === true;
+
         return new self(
             key: $key,
             name: $name,
             actionKey: $actionKey,
             payload: $payload,
             callback: $callback,
+            stopOnError: $stopOnError,
             position: self::hydratePosition($data),
             metadata: self::hydrateMetadata($data),
         );
@@ -108,6 +121,10 @@ final class ActionNode extends AbstractWorkflowNode
 
         if ($this->callback !== null) {
             $config['callback'] = $this->callback;
+        }
+
+        if ($this->stopOnError) {
+            $config['stop_on_error'] = true;
         }
 
         $payload[WorkflowDefinitionSchema::FIELD_CONFIG] = $config;

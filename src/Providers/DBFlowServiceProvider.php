@@ -230,6 +230,7 @@ final class DBFlowServiceProvider extends ServiceProvider
             fn ($app): RejectTask => new RejectTask(
                 $app->make(TransitionResolver::class),
                 $app->make(ApprovalNodeAssigneeResolver::class),
+                $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),

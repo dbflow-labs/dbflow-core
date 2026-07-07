@@ -17,12 +17,20 @@ declare(strict_types=1);
 
 namespace DbflowLabs\Core\Tests\Feature;
 
+use DbflowLabs\Core\Actions\PublishWorkflowDraft;
+use DbflowLabs\Core\Actions\SaveWorkflowDraft;
+use DbflowLabs\Core\DBFlow;
+use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
 use DbflowLabs\Core\Models\Workflow;
+use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Support\WorkflowBuilderNodeFactory;
 use DbflowLabs\Core\Tests\Concerns\BuildsMinimalPublishedWorkflow;
 use DbflowLabs\Core\Tests\Fixtures\IntegerTestSubject;
 use DbflowLabs\Core\Tests\Fixtures\TestUser;
+use DbflowLabs\Core\Tests\Fixtures\ThrowingAssigneeResolver;
 use DbflowLabs\Core\Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -86,6 +94,55 @@ final class HasWorkflowBindingTest extends TestCase
         ]);
 
         $this->assertFalse($subject->hasRunningWorkflow('unbound_workflow'));
+    }
+
+    #[Test]
+    public function ui_binding_mode_auto_start_failure_does_not_abort_model_creation_or_other_workflows(): void
+    {
+        config(['dbflow.binding_mode' => 'ui']);
+        Log::spy();
+
+        /** @var AssigneeResolverRegistry $assignees */
+        $assignees = $this->app->make(AssigneeResolverRegistry::class);
+        DBFlow::registerAssigneeResolver($assignees, 'always_throws', new ThrowingAssigneeResolver);
+
+        $brokenWorkflow = $this->createMinimalPublishedWorkflow('broken_auto_start', 'Broken Auto Start');
+        $brokenWorkflow->forceFill(['model_type' => IntegerTestSubject::class])->save();
+        $this->makeAssigneeCallback($brokenWorkflow, 'always_throws');
+
+        $healthyWorkflow = $this->createMinimalPublishedWorkflow('healthy_auto_start', 'Healthy Auto Start');
+        $healthyWorkflow->forceFill(['model_type' => IntegerTestSubject::class])->save();
+
+        $subject = IntegerTestSubject::query()->create([
+            'reference_code' => 'UI-BROKEN-001',
+        ]);
+
+        $this->assertNotNull($subject->fresh());
+        $this->assertFalse($subject->fresh()->hasRunningWorkflow('broken_auto_start'));
+        $this->assertTrue($subject->fresh()->hasRunningWorkflow('healthy_auto_start'));
+        Log::shouldHaveReceived('error')->once();
+    }
+
+    private function makeAssigneeCallback(Workflow $workflow, string $resolverKey): void
+    {
+        $factory = app(WorkflowBuilderNodeFactory::class);
+
+        $nodes = [
+            $factory->make(WorkflowDefinitionSchema::NODE_TYPE_START, 'start', 'Start'),
+            $factory->make(WorkflowDefinitionSchema::NODE_TYPE_APPROVAL, 'approval', 'Approval'),
+            $factory->make(WorkflowDefinitionSchema::NODE_TYPE_END, 'end', 'End'),
+        ];
+
+        $nodes[1]['config'][WorkflowDefinitionSchema::CONFIG_ASSIGNEES] = [
+            WorkflowDefinitionSchema::ASSIGNEE_FIELD_TYPE => WorkflowDefinitionSchema::ASSIGNEE_TYPE_CALLBACK,
+            WorkflowDefinitionSchema::ASSIGNEE_FIELD_CALLBACK => $resolverKey,
+        ];
+
+        $definition = $workflow->draftDefinition();
+        $definition[WorkflowDefinitionSchema::FIELD_NODES] = $nodes;
+
+        app(SaveWorkflowDraft::class)->handle($workflow, $definition, 1);
+        app(PublishWorkflowDraft::class)->handle($workflow->fresh(), 1);
     }
 
     #[Test]
