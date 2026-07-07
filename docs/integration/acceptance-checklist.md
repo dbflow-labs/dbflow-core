@@ -94,3 +94,27 @@ Use path or tagged dependencies: Core `1.0.0-rc.1`, Filament `1.0.0-rc.2+`, Pro 
 | Pro | | |
 
 Pair `dbflowlabs/filament:1.0.0-rc.2` with `dbflowlabs/core:1.0.0-rc.1` until stable `1.0.0`.
+
+---
+
+## 1.0.0 stable integration
+
+Use path or tagged dependencies: Core `1.0.0`, Filament `1.0.0`, Pro `1.0.0`.
+
+### Cross-package CI (stable)
+
+- [x] `dbflow-core`: 152 PHPUnit, PHPStan L4, coverage gates (runtime 82.5% / src 70.1%)
+- [x] `dbflow-filament`: `composer test` green (140 tests) with path-linked Core `1.0.0`
+- [x] `dbflow-filament-pro`: `composer test` green (323 tests) with path-linked Core + Filament `1.0.0`
+- [x] Version constraints updated to `^1.0` on Core / Filament / Pro `composer.json`
+- [x] No breaking Filament or Pro code changes required for stable Core
+
+### Sign-off (stable)
+
+| Role | Name | Date |
+| --- | --- | --- |
+| Core | integration CI | 2026-07-07 |
+| Filament | integration CI | 2026-07-07 |
+| Pro | integration CI | 2026-07-07 |
+
+Pair `dbflowlabs/filament:1.0.0` with `dbflowlabs/core:1.0.0` and `dbflowlabs/filament-pro:1.0.0`.

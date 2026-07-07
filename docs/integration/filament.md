@@ -1,6 +1,6 @@
 # Filament integration contract (Core ↔ `dbflowlabs/filament`)
 
-> Status: **0.9.x-beta** — public contract documented before API freeze at `1.0.0-rc.1`.  
+> Status: **1.0.0 stable** — public contract released with coordinated Filament / Pro stable tags.  
 > Audience: maintainers of `dbflowlabs/filament`, host applications, and third-party inbox integrations.
 
 Core owns workflow **runtime semantics**. Filament owns **UI and panel wiring**. This document is the cross-package contract: what Filament may rely on, what it must not bypass, and how versions align.

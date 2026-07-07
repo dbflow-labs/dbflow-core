@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-07-07
+
+### Added
+
+- `ActionFailed` Laravel event and `WorkflowLogEvent::ActionFailed` audit entry when an action node handler throws.
+- `ActionExecutionFailedException` and optional action node `fail_on_exception` to abort traversal instead of fire-and-forget logging.
+- Sequential approval/rejection edge-case coverage and stricter expression evaluation for condition routing.
+
+### Changed
+
+- **First stable release.** Public runtime API frozen since `1.0.0-rc.1`; no breaking changes from the RC tag.
+- Coordinated stable pairing with `dbflowlabs/filament:1.0.0` and `dbflowlabs/filament-pro:1.0.0`.
+
+### Documentation
+
+- README and `UPGRADE-1.0.md` updated for stable `1.0.0` installation.
+- `docs/integration/filament.md` version matrix marks `1.0.0` as released.
+- Ecosystem integration runbook: `scripts/merge-composer-local.php` for path-linked cross-package CI.
+
+### Upgrade notes
+
+- From `1.0.0-rc.1`: `composer require dbflowlabs/core:^1.0` (no code changes required for hosts on the frozen API).
+- Pair with `dbflowlabs/filament:^1.0` when using the Filament adapter.
+- See [UPGRADE-1.0.md](UPGRADE-1.0.md) when upgrading from any `0.x` tag.
+
 ## [1.0.0-rc.1] - 2026-07-07
 
 ### Added
@@ -185,6 +210,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - If you previously set `DBFLOW_ENABLED=false` but still called runtime APIs, expect `WorkflowNotAvailableException` after upgrading.
 - Replace imports of `Services\WorkflowDefinitionValidator` with `Validation\WorkflowDefinitionValidator`.
 
+[1.0.0]: https://github.com/dbflow-labs/dbflow-core/compare/1.0.0-rc.1...1.0.0
 [1.0.0-rc.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.9.0-beta.1...1.0.0-rc.1
 [0.9.0-beta.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.5.0-alpha.1...0.9.0-beta.1
 [0.4.0-alpha.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.3.1-alpha.1...0.4.0-alpha.1

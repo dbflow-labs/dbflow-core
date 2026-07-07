@@ -1,6 +1,22 @@
 # Upgrading to DBFlow Core 1.0
 
-This guide summarizes breaking and behavioral changes from early alpha releases through `1.0.0-rc.1`. For full release notes, see [CHANGELOG.md](CHANGELOG.md).
+This guide summarizes breaking and behavioral changes from early alpha releases through **stable `1.0.0`**. For full release notes, see [CHANGELOG.md](CHANGELOG.md).
+
+## Stable 1.0.0
+
+`1.0.0` is the first stable release. The runtime public API has been frozen since `1.0.0-rc.1`; upgrading from the RC tag requires **no breaking code changes** for hosts on the documented contract.
+
+```bash
+composer require dbflowlabs/core:^1.0
+```
+
+Pair with `dbflowlabs/filament:^1.0` and `dbflowlabs/filament-pro:^1.0` when using the Filament ecosystem packages.
+
+Additive changes since `1.0.0-rc.1` (non-breaking):
+
+- `ActionFailed` event and `WorkflowLogEvent::ActionFailed` when action node handlers throw
+- Optional action node `fail_on_exception` to abort traversal via `ActionExecutionFailedException`
+- Sequential approval/rejection edge-case fixes and stricter condition expression evaluation
 
 ## Recommended upgrade path
 
@@ -12,19 +28,20 @@ Upgrade in order when jumping multiple prereleases:
 4. `0.4.0-alpha.1` — `DBFlow::reassign()` and `TaskHooks::onReassigned()`
 5. `0.5.0-alpha.1` — approval timeouts and `dbflow:process-timeouts`
 6. `0.9.0-beta.1` — Filament integration contract (`WorkflowTaskQueryService`)
-7. `1.0.0-rc.1` — API freeze (see [API stability](#api-stability-at-100-rc1))
+7. `1.0.0-rc.1` — API freeze (see [API stability](#api-stability-at-100))
+8. `1.0.0` — first stable release (no breaking changes from RC)
 
-Pin exact tags until you complete integration testing:
+For new projects or RC adopters ready to move to stable:
 
 ```bash
-composer require dbflowlabs/core:1.0.0-rc.1
+composer require dbflowlabs/core:^1.0
 ```
 
-Pair with `dbflowlabs/filament:1.0.0-rc.1` when using the Filament adapter.
+Pair with `dbflowlabs/filament:^1.0` when using the Filament adapter.
 
-## API stability at 1.0.0-rc.1
+## API stability at 1.0.0
 
-From `1.0.0-rc.1`, the following surfaces are **frozen** until `1.0.0` (only backward-compatible additions allowed):
+From `1.0.0-rc.1` (unchanged at stable `1.0.0`), the following surfaces are **frozen** until the next major:
 
 | Surface | Location |
 | --- | --- |
@@ -81,7 +98,7 @@ From `1.0.0-rc.1`, the following surfaces are **frozen** until `1.0.0` (only bac
 
 ## Host integration checklist (1.0)
 
-- [ ] Pin `dbflowlabs/core:1.0.0-rc.1` (and matching Filament tag if applicable).
+- [ ] Pin `dbflowlabs/core:^1.0` (and matching Filament tag if applicable).
 - [ ] Run migrations on a staging database.
 - [ ] Update custom `TaskHooks` classes with `onReassigned()` if not already done.
 - [ ] Route runtime actions through `DBFlow::` facade methods, not direct action instantiation.

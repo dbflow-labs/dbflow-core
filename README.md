@@ -12,8 +12,8 @@ DBFlow Core lets you add approval workflows, tasks, transitions, rejection flows
 
 It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific business adapters, Filament UI packages, and the visual workflow Builder are distributed separately.
 
-> [!WARNING]
-> DBFlow Core is in **release candidate** (`1.0.0-rc.x`). The runtime public API is frozen; see [API stability](#api-stability) and [UPGRADE-1.0.md](UPGRADE-1.0.md). Pin exact tags until `1.0.0`.
+> [!NOTE]
+> DBFlow Core **1.0.0** is the first stable release. The runtime public API is frozen; see [API stability](#api-stability) and [UPGRADE-1.0.md](UPGRADE-1.0.md).
 
 ## Contents
 
@@ -45,8 +45,9 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 | **License** | [MIT](LICENSE) |
 | **Repository** | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core) |
 | **Default branch** | `main` |
-| **Stability** | `Release candidate (1.0.0-rc.x)` |
+| **Stability** | `Stable (1.0.0)` |
 | **Author** | Baron Wang <hello@dbflow.dev> |
+| **Documentation** | [dbflow.dev/docs](https://dbflow.dev/docs) |
 | **Laravel compatibility** | `13.x` |
 | **PHP requirements** | `8.3`, `8.4` |
 
@@ -79,15 +80,13 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 ### Packagist Installation
 
 ```bash
-composer require dbflowlabs/core:1.0.0-rc.1
+composer require dbflowlabs/core
 ```
-
-Until a stable `1.0.0` release, Packagist may only publish prerelease tags. If Composer reports that no **stable** version matches `minimum-stability`, pin an explicit prerelease tag (as above) or temporarily allow prereleases in the host `composer.json`.
 
 Releases are tagged on GitHub, for example:
 
 ```text
-v1.0.0-rc.1
+v1.0.0
 ```
 
 ## Laravel Integration
@@ -543,7 +542,7 @@ Core does not know about Filament, ERP document types, or plugin mutual-exclusio
 
 ## Host Integration Checklist
 
-1. `composer require dbflowlabs/core:1.0.0-rc.1` (pair with `dbflowlabs/filament:1.0.0-rc.1` when using the Filament adapter).
+1. `composer require dbflowlabs/core` (pair with `dbflowlabs/filament:^1.0` when using the Filament adapter).
 2. `php artisan vendor:publish --tag=dbflow-config` and set `DBFLOW_AUTH_*`.
 3. `php artisan migrate` (migrations load from the package; publishing optional).
 4. Implement `WorkflowDefinitionProvider`(s) and register them in a host service provider.
@@ -590,7 +589,7 @@ Cross-package contracts for pending-task queries, runtime actions, events, and v
 - [`docs/integration/filament.md`](docs/integration/filament.md) — public API surface for `dbflowlabs/filament` integrators
 - [`docs/integration/acceptance-checklist.md`](docs/integration/acceptance-checklist.md) — release verification checklist
 
-Target version pairing: `dbflowlabs/filament` `1.0.0-rc.x` requires `dbflowlabs/core` `^1.0.0-rc.1`; stable `1.0.0` pairs require `^1.0.0` on both packages.
+Target version pairing: `dbflowlabs/filament` `^1.0` requires `dbflowlabs/core` `^1.0`.
 
 **Choosing a UI path:**
 
@@ -622,7 +621,7 @@ The CI pipeline validates the package against PHP 8.3 and 8.4 with PHPUnit, PHPS
 
 ## API stability
 
-From `1.0.0-rc.1`, these surfaces are frozen until `1.0.0`:
+From `1.0.0`, these surfaces are frozen until the next major release:
 
 - `DBFlow::start()`, `approve()`, `reject()`, `cancel()`, `reassign()`
 - `DBFlow::register*` boot-time registration methods
@@ -636,13 +635,10 @@ Automated contract tests: `EcosystemContractTest`, `PublicApiContractTest`.
 
 ## Versioning
 
-DBFlow Core is in the **1.0.0 release candidate** phase.
+DBFlow Core **1.0.0** is the first stable semver release.
 
-Until stable `1.0.0` ships:
-
-- Pin exact RC tags, such as `1.0.0-rc.1`
-- Review [UPGRADE-1.0.md](UPGRADE-1.0.md) and [CHANGELOG.md](CHANGELOG.md) before upgrading
-- Test workflow definitions and runtime transitions in a staging environment
+- Review [UPGRADE-1.0.md](UPGRADE-1.0.md) and [CHANGELOG.md](CHANGELOG.md) before upgrading from `0.x` or RC tags
+- Test workflow definitions and runtime transitions in a staging environment after upgrades
 - Avoid relying on `@internal` definition-management actions
 
 ## Support
