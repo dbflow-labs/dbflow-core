@@ -338,7 +338,7 @@ final class BlueprintValidator
             $this->addError(
                 $nodePath.'.config.assignees.value',
                 'invalid_value',
-                'User assignee value must be a positive integer user id.',
+                'User assignee value must be a valid user id (positive integer or non-empty string id).',
             );
         }
     }

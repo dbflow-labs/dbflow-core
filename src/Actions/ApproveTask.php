@@ -81,12 +81,12 @@ final class ApproveTask
             }
 
             $actorUserId = $this->resolveActorUserId($actor);
-
-            if ($actor !== null) {
-                $this->assertActorCanApprove($lockedTask, $actorUserId);
-            }
-
             $approvalMode = $lockedTask->approval_mode ?? ApprovalMode::Any;
+
+            // Unlike RejectTask (which allows a null system actor for auto-reject-on-timeout),
+            // approval always requires a real assignee; there is no legitimate system-approve path.
+            $this->assertActorCanApprove($lockedTask, $actorUserId, $approvalMode);
+
             $taskApproved = $this->applyApprovalMode($lockedTask, $approvalMode, $actorUserId);
 
             if (! $taskApproved) {
@@ -115,20 +115,37 @@ final class ApproveTask
         });
     }
 
-    private function assertActorCanApprove(WorkflowTask $task, int|string|null $actorUserId): void
+    private function assertActorCanApprove(WorkflowTask $task, int|string|null $actorUserId, ApprovalMode $approvalMode): void
     {
         if ($actorUserId === null) {
             throw new UserCannotApproveTaskException('Actor user id is invalid.');
         }
 
-        $hasPendingAssignment = WorkflowTaskAssignment::query()
+        $assignment = WorkflowTaskAssignment::query()
             ->where('workflow_task_id', $task->getKey())
             ->where('assignee_user_id', $actorUserId)
             ->where('status', WorkflowTaskAssignmentStatus::Pending)
-            ->exists();
+            ->first();
 
-        if (! $hasPendingAssignment) {
+        if ($assignment === null) {
             throw new UserCannotApproveTaskException('Actor does not have a pending assignment for this task.');
+        }
+
+        if ($approvalMode->isSequential()) {
+            $this->assertActorIsCurrentSequentialAssignee($task, $assignment);
+        }
+    }
+
+    private function assertActorIsCurrentSequentialAssignee(WorkflowTask $task, WorkflowTaskAssignment $assignment): void
+    {
+        $currentSequence = WorkflowTaskAssignment::query()
+            ->where('workflow_task_id', $task->getKey())
+            ->where('status', WorkflowTaskAssignmentStatus::Pending)
+            ->whereNotNull('sequence')
+            ->min('sequence');
+
+        if ($currentSequence === null || (int) $assignment->sequence !== (int) $currentSequence) {
+            throw new UserCannotApproveTaskException('Only the current sequential assignee may approve this task.');
         }
     }
 

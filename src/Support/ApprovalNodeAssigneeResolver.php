@@ -29,7 +29,7 @@ final class ApprovalNodeAssigneeResolver
     ) {}
 
     /**
-     * @return list<int>
+     * @return list<int|string>
      */
     public function resolveOrFail(WorkflowInstance $instance, ApprovalNode $node): array
     {

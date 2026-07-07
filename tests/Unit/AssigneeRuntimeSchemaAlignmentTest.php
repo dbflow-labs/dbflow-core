@@ -78,11 +78,22 @@ final class AssigneeRuntimeSchemaAlignmentTest extends TestCase
     }
 
     #[Test]
-    public function user_assignee_with_non_numeric_value_fails_validation(): void
+    public function user_assignee_with_uuid_value_validates(): void
     {
         $result = (new WorkflowDefinitionValidator)->validate($this->definitionWithAssignee(
             WorkflowDefinitionSchema::ASSIGNEE_TYPE_USER,
-            'manager',
+            '550e8400-e29b-41d4-a716-446655440000',
+        ));
+
+        $this->assertTrue($result->isValid(), json_encode($result->errors()));
+    }
+
+    #[Test]
+    public function user_assignee_with_value_exceeding_column_width_fails_validation(): void
+    {
+        $result = (new WorkflowDefinitionValidator)->validate($this->definitionWithAssignee(
+            WorkflowDefinitionSchema::ASSIGNEE_TYPE_USER,
+            str_repeat('a', 65),
         ));
 
         $this->assertFalse($result->isValid());

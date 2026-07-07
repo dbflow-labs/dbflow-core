@@ -180,6 +180,17 @@ final class WorkflowDefinitionSchema
         return self::FIELD_CONDITION;
     }
 
+    /**
+     * Matches the VARCHAR(64) width of assignee_user_id columns; keeps parity with
+     * database/migrations/2026_07_06_100000_convert_dbflow_user_id_columns_to_string.php.
+     */
+    public const ASSIGNEE_USER_ID_MAX_LENGTH = 64;
+
+    /**
+     * Validates a user assignee value. Accepts a positive integer id or any non-empty
+     * string id (numeric, UUID, ULID, etc.) up to the assignee_user_id column width, since
+     * user primary keys are stored as VARCHAR(64) and are not restricted to integers.
+     */
     public static function isValidUserAssigneeValue(mixed $value): bool
     {
         if ($value === null) {
@@ -196,11 +207,7 @@ final class WorkflowDefinitionSchema
 
         $normalized = trim($value);
 
-        if ($normalized === '' || ! ctype_digit($normalized)) {
-            return false;
-        }
-
-        return (int) $normalized > 0;
+        return $normalized !== '' && mb_strlen($normalized) <= self::ASSIGNEE_USER_ID_MAX_LENGTH;
     }
 
     /**

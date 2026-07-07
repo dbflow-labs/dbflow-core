@@ -83,9 +83,10 @@ final class RejectTask
             }
 
             $actorUserId = $this->resolveActorUserId($actor);
+            $approvalMode = $lockedTask->approval_mode ?? ApprovalMode::Any;
 
             if ($actor !== null) {
-                $this->assertActorCanReject($lockedTask, $actorUserId);
+                $this->assertActorCanReject($lockedTask, $actorUserId, $approvalMode);
             }
 
             $this->closeCurrentTaskAssignments($lockedTask, $actorUserId);
@@ -330,20 +331,37 @@ final class RejectTask
             ]);
     }
 
-    private function assertActorCanReject(WorkflowTask $task, int|string|null $actorUserId): void
+    private function assertActorCanReject(WorkflowTask $task, int|string|null $actorUserId, ApprovalMode $approvalMode): void
     {
         if ($actorUserId === null) {
             throw new UserCannotApproveTaskException('Actor user id is invalid.');
         }
 
-        $hasPendingAssignment = WorkflowTaskAssignment::query()
+        $assignment = WorkflowTaskAssignment::query()
             ->where('workflow_task_id', $task->getKey())
             ->where('assignee_user_id', $actorUserId)
             ->where('status', WorkflowTaskAssignmentStatus::Pending)
-            ->exists();
+            ->first();
 
-        if (! $hasPendingAssignment) {
+        if ($assignment === null) {
             throw new UserCannotApproveTaskException('Actor does not have a pending assignment for this task.');
+        }
+
+        if ($approvalMode->isSequential()) {
+            $this->assertActorIsCurrentSequentialAssignee($task, $assignment);
+        }
+    }
+
+    private function assertActorIsCurrentSequentialAssignee(WorkflowTask $task, WorkflowTaskAssignment $assignment): void
+    {
+        $currentSequence = WorkflowTaskAssignment::query()
+            ->where('workflow_task_id', $task->getKey())
+            ->where('status', WorkflowTaskAssignmentStatus::Pending)
+            ->whereNotNull('sequence')
+            ->min('sequence');
+
+        if ($currentSequence === null || (int) $assignment->sequence !== (int) $currentSequence) {
+            throw new UserCannotApproveTaskException('Only the current sequential assignee may reject this task.');
         }
     }
 }

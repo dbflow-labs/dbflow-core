@@ -41,7 +41,7 @@ final class AssigneeResolverRegistry
     }
 
     /**
-     * @return list<int>
+     * @return list<int|string>
      */
     public function resolve(WorkflowInstance $instance, ApprovalNode $node): array
     {
@@ -71,13 +71,9 @@ final class AssigneeResolverRegistry
         $seen = [];
 
         foreach ($values as $value) {
-            if ($value === null || $value === '') {
-                continue;
-            }
+            $userId = $this->normalizeUserId($value);
 
-            $userId = (int) $value;
-
-            if ($userId <= 0 || isset($seen[$userId])) {
+            if ($userId === null || isset($seen[$userId])) {
                 continue;
             }
 
@@ -90,6 +86,34 @@ final class AssigneeResolverRegistry
         }
 
         return $userIds;
+    }
+
+    /**
+     * Normalizes a raw assignee value into a user id. Supports positive integers and
+     * non-empty string ids (numeric, UUID, ULID, etc.), matching the VARCHAR(64)
+     * assignee_user_id column. Returns null when the value is not a valid user id.
+     */
+    private function normalizeUserId(mixed $value): int|string|null
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value)) {
+            return $value > 0 ? $value : null;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        if ($normalized === '' || mb_strlen($normalized) > WorkflowDefinitionSchema::ASSIGNEE_USER_ID_MAX_LENGTH) {
+            return null;
+        }
+
+        return $normalized;
     }
 
     /**
@@ -138,15 +162,15 @@ final class AssigneeResolverRegistry
         }
 
         if ($type === WorkflowDefinitionSchema::ASSIGNEE_TYPE_USER || $type === 'user') {
-            $userId = (int) ($assignees[WorkflowDefinitionSchema::ASSIGNEE_FIELD_VALUE] ?? $assignees['value'] ?? 0);
+            $rawUserId = $assignees[WorkflowDefinitionSchema::ASSIGNEE_FIELD_VALUE] ?? $assignees['value'] ?? null;
 
-            if ($userId <= 0) {
+            if (! WorkflowDefinitionSchema::isValidUserAssigneeValue($rawUserId)) {
                 throw new InvalidWorkflowDefinitionException('User assignee value must be a valid user id.');
             }
 
             return [
                 'type' => 'user_ids',
-                'value' => [$userId],
+                'value' => [is_string($rawUserId) ? trim($rawUserId) : $rawUserId],
             ];
         }
 

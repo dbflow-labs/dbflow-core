@@ -67,6 +67,9 @@ final class WorkflowTaskQueryService
                 // avoiding stale assignments after multi-approver completion
                 $query->where('status', WorkflowTaskStatus::Pending);
             })
+            ->where(static function ($query): void {
+                self::excludeNotYetActionableSequentialAssignments($query);
+            })
             ->with([
                 'workflowTask',
                 'workflowTask.workflowInstance',
@@ -91,6 +94,31 @@ final class WorkflowTaskQueryService
             ->whereHas('workflowTask', static function ($query): void {
                 $query->where('status', WorkflowTaskStatus::Pending);
             })
+            ->where(static function ($query): void {
+                self::excludeNotYetActionableSequentialAssignments($query);
+            })
             ->count();
+    }
+
+    /**
+     * Restricts sequential-mode assignments to the currently actionable one (lowest pending sequence
+     * per task), so users are not shown tasks they cannot yet act on. Assignments without a sequence
+     * (any/all approval modes) are unaffected.
+     *
+     * @param  Builder<WorkflowTaskAssignment>  $query
+     */
+    private static function excludeNotYetActionableSequentialAssignments(Builder $query): void
+    {
+        $query
+            ->whereNull('sequence')
+            ->orWhereNotExists(static function ($subQuery): void {
+                $subQuery
+                    ->selectRaw('1')
+                    ->from('dbflow_workflow_task_assignments as earlier_assignments')
+                    ->whereColumn('earlier_assignments.workflow_task_id', 'dbflow_workflow_task_assignments.workflow_task_id')
+                    ->where('earlier_assignments.status', WorkflowTaskAssignmentStatus::Pending->value)
+                    ->whereNotNull('earlier_assignments.sequence')
+                    ->whereColumn('earlier_assignments.sequence', '<', 'dbflow_workflow_task_assignments.sequence');
+            });
     }
 }

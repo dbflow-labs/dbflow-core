@@ -25,6 +25,7 @@ use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
+use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowLog;
 use DbflowLabs\Core\Models\WorkflowTask;
@@ -112,6 +113,81 @@ final class SequentialApprovalFlowTest extends TestCase
                 ->where('event', WorkflowLogEvent::TaskCreated)
                 ->count(),
         );
+    }
+
+    #[Test]
+    public function later_sequential_assignee_cannot_approve_out_of_order(): void
+    {
+        $users = $this->seedEngineUsers();
+        $this->registerSequentialTeamResolver([
+            (int) $users['first']->getKey(),
+            (int) $users['second']->getKey(),
+        ]);
+
+        $definition = $this->loadBlueprintFixture('sequential_multi_level_approval');
+        $definition = $this->patchAssigneeUserId($definition, 'director_approval', (int) $users['director']->getKey());
+
+        $workflow = app(CreateWorkflowDraft::class)->handle($definition, 1);
+        app(PublishWorkflowDraft::class)->handle($workflow, 1);
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'SEQ-OOO-001']);
+
+        $instance = DBFlow::start('sequential_multi_level_approval', $subject, $users['first']->getKey());
+        $managerTask = $this->pendingTaskForNode($instance, 'manager_approval');
+
+        $this->expectException(UserCannotApproveTaskException::class);
+
+        DBFlow::approve($managerTask, $users['second']->getKey());
+    }
+
+    #[Test]
+    public function later_sequential_assignee_cannot_reject_out_of_order(): void
+    {
+        $users = $this->seedEngineUsers();
+        $this->registerSequentialTeamResolver([
+            (int) $users['first']->getKey(),
+            (int) $users['second']->getKey(),
+        ]);
+
+        $definition = $this->loadBlueprintFixture('sequential_multi_level_approval');
+        $definition = $this->patchAssigneeUserId($definition, 'director_approval', (int) $users['director']->getKey());
+
+        $workflow = app(CreateWorkflowDraft::class)->handle($definition, 1);
+        app(PublishWorkflowDraft::class)->handle($workflow, 1);
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'SEQ-OOO-002']);
+
+        $instance = DBFlow::start('sequential_multi_level_approval', $subject, $users['first']->getKey());
+        $managerTask = $this->pendingTaskForNode($instance, 'manager_approval');
+
+        $this->expectException(UserCannotApproveTaskException::class);
+
+        DBFlow::reject($managerTask, $users['second']->getKey());
+    }
+
+    #[Test]
+    public function pending_tasks_query_only_surfaces_current_sequential_assignee(): void
+    {
+        $users = $this->seedEngineUsers();
+        $this->registerSequentialTeamResolver([
+            (int) $users['first']->getKey(),
+            (int) $users['second']->getKey(),
+        ]);
+
+        $definition = $this->loadBlueprintFixture('sequential_multi_level_approval');
+        $definition = $this->patchAssigneeUserId($definition, 'director_approval', (int) $users['director']->getKey());
+
+        $workflow = app(CreateWorkflowDraft::class)->handle($definition, 1);
+        app(PublishWorkflowDraft::class)->handle($workflow, 1);
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'SEQ-QUERY-001']);
+
+        DBFlow::start('sequential_multi_level_approval', $subject, $users['first']->getKey());
+
+        $queryService = app(\DbflowLabs\Core\Services\WorkflowTaskQueryService::class);
+
+        $this->assertSame(1, $queryService->countPendingTasksForUser((string) $users['first']->getKey()));
+        $this->assertSame(0, $queryService->countPendingTasksForUser((string) $users['second']->getKey()));
     }
 
     private function pendingTaskForNode(WorkflowInstance $instance, string $nodeKey): WorkflowTask

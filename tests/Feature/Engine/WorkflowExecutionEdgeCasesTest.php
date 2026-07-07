@@ -111,6 +111,30 @@ final class WorkflowExecutionEdgeCasesTest extends TestCase
     }
 
     #[Test]
+    public function approving_with_a_null_actor_throws_unauthorized(): void
+    {
+        $users = $this->seedEngineUsers();
+        $definition = $this->loadBlueprintFixture('conditional_routing');
+        $definition = $this->patchAssigneeUserId($definition, 'high_value_review', (int) $users['first']->getKey());
+        $this->publishDefinition($definition);
+
+        $subject = ContextTestSubject::query()
+            ->create(['reference_code' => 'EDGE-NULL-ACTOR-001'])
+            ->withWorkflowVariables(['amount' => 15000]);
+
+        $instance = DBFlow::start('conditional_routing', $subject, $users['first']->getKey());
+
+        $task = WorkflowTask::query()
+            ->where('workflow_instance_id', $instance->getKey())
+            ->where('status', WorkflowTaskStatus::Pending)
+            ->firstOrFail();
+
+        $this->expectException(UserCannotApproveTaskException::class);
+
+        DBFlow::approve($task);
+    }
+
+    #[Test]
     public function reject_end_strategy_terminates_instance(): void
     {
         $users = $this->seedEngineUsers();

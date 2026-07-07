@@ -23,7 +23,8 @@ interface AssigneeResolver
 {
     /**
      * @param  array<string, mixed>  $nodeDefinition
-     * @return list<int>
+     * @return list<int|string>  Resolved user ids; may be integers or strings (UUID/ULID) since
+     *                            assignee_user_id is stored as VARCHAR(64).
      */
     public function resolve(WorkflowInstance $instance, array $nodeDefinition): array;
 }
