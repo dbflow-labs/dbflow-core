@@ -22,12 +22,16 @@ use DbflowLabs\Core\Definitions\Contracts\WorkflowNodeInterface;
 use DbflowLabs\Core\Definitions\Nodes\ActionNode;
 use DbflowLabs\Core\Definitions\Nodes\ApprovalNode;
 use DbflowLabs\Core\Definitions\Nodes\EndNode;
+use DbflowLabs\Core\Enums\ActionExecutionMode;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
 use DbflowLabs\Core\Events\ActionFailed as ActionFailedEvent;
 use DbflowLabs\Core\Exceptions\ActionExecutionFailedException;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Exceptions\PremiumFeatureMissingException;
 use DbflowLabs\Core\Models\WorkflowInstance;
+use DbflowLabs\Core\Services\Actions\ActionExecutionInitializer;
+use DbflowLabs\Core\Services\Actions\DispatchActionExecutions;
+use DbflowLabs\Core\Services\Actions\ReliableActionHandlerRegistry;
 use DbflowLabs\Core\Support\ActionManager;
 
 final class WorkflowNodeTraverser
@@ -38,6 +42,9 @@ final class WorkflowNodeTraverser
         private readonly TransitionResolver $transitionResolver,
         private readonly ActionManager $actionManager,
         private readonly WorkflowLogger $logger,
+        private readonly ActionExecutionInitializer $actionExecutionInitializer,
+        private readonly DispatchActionExecutions $dispatchActionExecutions,
+        private readonly ReliableActionHandlerRegistry $reliableActionHandlerRegistry,
     ) {}
 
     /**
@@ -46,7 +53,7 @@ final class WorkflowNodeTraverser
      * @param  array<string, mixed>  $variables
      * @param  callable(WorkflowInstance, ApprovalNode, mixed): void  $onApprovalNode
      * @param  callable(WorkflowInstance, EndNode, mixed): void  $onEndNode
-     * @return 'pending'|'completed'
+     * @return 'pending'|'completed'|'blocked'
      */
     public function traverse(
         WorkflowInstance $instance,
@@ -71,7 +78,11 @@ final class WorkflowNodeTraverser
         }
 
         if ($node instanceof ActionNode) {
-            $this->executeActionNode($instance, $node, $actor);
+            $blocked = $this->executeActionNode($instance, $node, $actor);
+
+            if ($blocked) {
+                return 'blocked';
+            }
 
             $nextNode = $this->transitionResolver->nextNode(
                 $blueprint,
@@ -109,7 +120,7 @@ final class WorkflowNodeTraverser
         );
     }
 
-    private function executeActionNode(WorkflowInstance $instance, ActionNode $node, mixed $actor): void
+    private function executeActionNode(WorkflowInstance $instance, ActionNode $node, mixed $actor): bool
     {
         $nodeKey = $node->key();
         $actionKey = $node->actionKey();
@@ -124,9 +135,32 @@ final class WorkflowNodeTraverser
                 payload: ['node_key' => $nodeKey, 'skipped' => true, 'reason' => 'no_action_key'],
             );
 
-            return;
+            return false;
         }
 
+        $mode = $node->executionMode();
+
+        if ($mode->isReliable()) {
+            if (! $this->reliableActionHandlerRegistry->has($actionKey)) {
+                throw new PremiumFeatureMissingException($actionKey, $nodeKey);
+            }
+
+            $execution = $this->actionExecutionInitializer->initialize($instance, $node, $actor);
+            $this->dispatchActionExecutions->queueAfterCommit((int) $execution->getKey());
+
+            return $mode === ActionExecutionMode::ReliableBlocking;
+        }
+
+        return $this->executeLegacyActionNode($instance, $node, $actor, $nodeKey, $actionKey);
+    }
+
+    private function executeLegacyActionNode(
+        WorkflowInstance $instance,
+        ActionNode $node,
+        mixed $actor,
+        string $nodeKey,
+        string $actionKey,
+    ): bool {
         if (! $this->actionManager->has($actionKey)) {
             throw new PremiumFeatureMissingException($actionKey, $nodeKey);
         }
@@ -165,5 +199,7 @@ final class WorkflowNodeTraverser
                 throw new ActionExecutionFailedException($actionKey, $nodeKey, $e);
             }
         }
+
+        return false;
     }
 }

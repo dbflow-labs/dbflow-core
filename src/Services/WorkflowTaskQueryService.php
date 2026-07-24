@@ -53,6 +53,7 @@ final class WorkflowTaskQueryService
      * Returns the base query for pending assignments (Filament tables, exports, custom paginators).
      *
      * Applies the same filters and eager loads as {@see getPendingTasksForUser()}.
+     * Includes original and effective assignees (v1.0 rows fall back to assignee_user_id).
      *
      * @return Builder<WorkflowTaskAssignment>
      */
@@ -60,8 +61,9 @@ final class WorkflowTaskQueryService
     {
         /** @var Builder<WorkflowTaskAssignment> $query */
         $query = WorkflowTaskAssignment::query()
-            ->where('assignee_user_id', $userId)
-            ->where('status', WorkflowTaskAssignmentStatus::Pending)
+            ->where('status', WorkflowTaskAssignmentStatus::Pending);
+        $query = WorkflowTaskAssignment::constrainActionableBy($query, $userId);
+        $query
             ->whereHas('workflowTask', static function ($query): void {
                 // Only return rows where the parent task is still pending,
                 // avoiding stale assignments after multi-approver completion
@@ -88,9 +90,12 @@ final class WorkflowTaskQueryService
      */
     public function countPendingTasksForUser(string $userId): int
     {
-        return WorkflowTaskAssignment::query()
-            ->where('assignee_user_id', $userId)
-            ->where('status', WorkflowTaskAssignmentStatus::Pending)
+        /** @var Builder<WorkflowTaskAssignment> $query */
+        $query = WorkflowTaskAssignment::query()
+            ->where('status', WorkflowTaskAssignmentStatus::Pending);
+        $query = WorkflowTaskAssignment::constrainActionableBy($query, $userId);
+
+        return $query
             ->whereHas('workflowTask', static function ($query): void {
                 $query->where('status', WorkflowTaskStatus::Pending);
             })

@@ -6,7 +6,7 @@ First stable release of the DBFlow workflow runtime for Laravel.
 
 - Public runtime API frozen since `1.0.0-rc.1` — no breaking changes from the RC tag
 - Coordinated stable release with `dbflowlabs/filament:1.0.0` and `dbflowlabs/filament-pro:1.0.0`
-- Additive since RC: `ActionFailed` event, optional `fail_on_exception` on action nodes, sequential approval edge-case fixes
+- Additive since RC: `ActionFailed` event, optional `stop_on_error` on action nodes, sequential approval edge-case fixes
 
 ## Upgrade
 

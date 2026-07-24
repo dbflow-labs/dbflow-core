@@ -19,6 +19,8 @@ namespace DbflowLabs\Core;
 
 use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
+use DbflowLabs\Core\Actions\Delegation\CreateDelegation;
+use DbflowLabs\Core\Actions\Delegation\RevokeDelegation;
 use DbflowLabs\Core\Actions\ReassignTask;
 use DbflowLabs\Core\Actions\RejectTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
@@ -27,14 +29,17 @@ use DbflowLabs\Core\Contracts\TaskHooks;
 use DbflowLabs\Core\Contracts\WorkflowDefinitionProvider;
 use DbflowLabs\Core\Contracts\WorkflowHooks;
 use DbflowLabs\Core\Enums\RejectStrategy;
+use DbflowLabs\Core\Models\WorkflowDelegation;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\MigratePendingTasksToDelegate;
 use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Support\DbflowRuntime;
 use Illuminate\Database\Eloquent\Model;
+use Carbon\CarbonInterface;
 
 final class DBFlow
 {
@@ -158,9 +163,82 @@ final class DBFlow
         mixed $fromActor,
         string $toUserId,
         ?string $comment = null,
+        ?string $idempotencyKey = null,
+        int|string|null $assignmentId = null,
     ): WorkflowInstance {
         DbflowRuntime::ensureEnabled();
 
-        return app(ReassignTask::class)->handle($task, $fromActor, $toUserId, $comment);
+        return app(ReassignTask::class)->handle(
+            $task,
+            $fromActor,
+            $toUserId,
+            $comment,
+            $idempotencyKey,
+            $assignmentId,
+        );
+    }
+
+    /**
+     * Create a time-bounded delegation rule (does not migrate existing pending tasks).
+     *
+     * @param  array<string, mixed>|null  $metadata
+     */
+    public static function createDelegation(
+        mixed $delegator,
+        mixed $delegate,
+        CarbonInterface|string $startsAt,
+        CarbonInterface|string $endsAt,
+        mixed $createdBy = null,
+        ?string $workflowKey = null,
+        ?string $nodeKey = null,
+        ?string $reason = null,
+        ?array $metadata = null,
+    ): WorkflowDelegation {
+        DbflowRuntime::ensureEnabled();
+
+        return app(CreateDelegation::class)->handle(
+            $delegator,
+            $delegate,
+            $startsAt,
+            $endsAt,
+            $createdBy,
+            $workflowKey,
+            $nodeKey,
+            $reason,
+            $metadata,
+        );
+    }
+
+    public static function revokeDelegation(
+        WorkflowDelegation $delegation,
+        mixed $revokedBy = null,
+        ?string $reason = null,
+    ): WorkflowDelegation {
+        DbflowRuntime::ensureEnabled();
+
+        return app(RevokeDelegation::class)->handle($delegation, $revokedBy, $reason);
+    }
+
+    /**
+     * Explicitly migrate matching pending tasks for a delegation via ReassignTask.
+     *
+     * @return array<string, mixed>
+     */
+    public static function migratePendingTasksToDelegate(
+        WorkflowDelegation $delegation,
+        mixed $actor = null,
+        ?int $maxTasks = null,
+        ?string $batchKey = null,
+        bool $dryRun = false,
+    ): array {
+        DbflowRuntime::ensureEnabled();
+
+        return app(MigratePendingTasksToDelegate::class)->handle(
+            $delegation,
+            $actor,
+            $maxTasks,
+            $batchKey,
+            $dryRun,
+        );
     }
 }

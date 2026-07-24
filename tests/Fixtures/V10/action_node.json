@@ -1,0 +1,46 @@
+{
+  "key": "v10_action_node",
+  "name": "V1.0 Action Node",
+  "schema_version": "1.0",
+  "description": "Synchronous Action Node using the Core built-in log handler before a terminal end node.",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "notify",
+      "type": "action",
+      "name": "Notify System",
+      "config": {
+        "action_key": "log",
+        "payload": {
+          "message": "v10 action executed",
+          "event": "action_log",
+          "context": {
+            "fixture": "v10_action_node"
+          }
+        }
+      }
+    },
+    {
+      "key": "end",
+      "type": "end",
+      "name": "End",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "notify"
+    },
+    {
+      "from": "notify",
+      "to": "end"
+    }
+  ]
+}

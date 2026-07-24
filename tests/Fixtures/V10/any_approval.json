@@ -1,0 +1,44 @@
+{
+  "key": "v10_any_approval",
+  "name": "V1.0 Any Approval",
+  "schema_version": "1.0",
+  "description": "Multi-candidate any-mode approval; first pending assignee completes the task and remaining assignments are skipped.",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "team_approval",
+      "type": "approval",
+      "name": "Team Any Approval",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "permission",
+          "value": "v10_team"
+        }
+      }
+    },
+    {
+      "key": "end_approved",
+      "type": "end",
+      "name": "Approved",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "team_approval",
+      "is_default": true
+    },
+    {
+      "from": "team_approval",
+      "to": "end_approved"
+    }
+  ]
+}

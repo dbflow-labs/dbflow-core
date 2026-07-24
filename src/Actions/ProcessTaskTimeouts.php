@@ -48,6 +48,7 @@ final class ProcessTaskTimeouts
         $taskIds = WorkflowTask::query()
             ->where('status', WorkflowTaskStatus::Pending)
             ->whereNotNull('due_at')
+            ->whereNull('sla_policy_source')
             ->where('due_at', '<=', $asOf)
             ->orderBy('id')
             ->pluck('id');

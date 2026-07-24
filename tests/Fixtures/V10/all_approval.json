@@ -1,0 +1,44 @@
+{
+  "key": "v10_all_approval",
+  "name": "V1.0 All Approval",
+  "schema_version": "1.0",
+  "description": "Multi-candidate all-mode approval; every assignee must approve before the task completes.",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "team_approval",
+      "type": "approval",
+      "name": "Team All Approval",
+      "config": {
+        "approval_mode": "all",
+        "assignees": {
+          "type": "permission",
+          "value": "v10_team"
+        }
+      }
+    },
+    {
+      "key": "end_approved",
+      "type": "end",
+      "name": "Approved",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "team_approval",
+      "is_default": true
+    },
+    {
+      "from": "team_approval",
+      "to": "end_approved"
+    }
+  ]
+}

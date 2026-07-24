@@ -37,6 +37,9 @@ final class ApprovalNode extends AbstractWorkflowNode
         private readonly ?TimeoutOnTimeout $timeoutOnTimeout = null,
         ?array $position = null,
         array $metadata = [],
+        private readonly bool $reassignmentEnabled = true,
+        private readonly bool $delegationEnabled = false,
+        private readonly ?array $slaConfig = null,
     ) {
         parent::__construct($key, $name, $position, $metadata);
     }
@@ -72,6 +75,29 @@ final class ApprovalNode extends AbstractWorkflowNode
     public function hasTimeout(): bool
     {
         return $this->timeoutDueIn !== null && $this->timeoutDueIn !== '';
+    }
+
+    public function reassignmentEnabled(): bool
+    {
+        return $this->reassignmentEnabled;
+    }
+
+    public function delegationEnabled(): bool
+    {
+        return $this->delegationEnabled;
+    }
+
+    public function hasSla(): bool
+    {
+        return is_array($this->slaConfig) && $this->slaConfig !== [];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function slaConfig(): ?array
+    {
+        return $this->slaConfig;
     }
 
     /**
@@ -115,6 +141,15 @@ final class ApprovalNode extends AbstractWorkflowNode
         }
 
         [$timeoutDueIn, $timeoutOnTimeout] = self::hydrateTimeout($config);
+        $slaConfig = self::hydrateSla($config);
+        $reassignmentEnabled = self::hydrateToggle(
+            $config[WorkflowDefinitionSchema::CONFIG_REASSIGNMENT] ?? null,
+            default: true,
+        );
+        $delegationEnabled = self::hydrateToggle(
+            $config[WorkflowDefinitionSchema::CONFIG_DELEGATION] ?? null,
+            default: false,
+        );
 
         return new self(
             key: $key,
@@ -125,6 +160,9 @@ final class ApprovalNode extends AbstractWorkflowNode
             timeoutOnTimeout: $timeoutOnTimeout,
             position: self::hydratePosition($data),
             metadata: self::hydrateMetadata($data),
+            reassignmentEnabled: $reassignmentEnabled,
+            delegationEnabled: $delegationEnabled,
+            slaConfig: $slaConfig,
         );
     }
 
@@ -146,6 +184,23 @@ final class ApprovalNode extends AbstractWorkflowNode
             }
 
             $payload[WorkflowDefinitionSchema::FIELD_CONFIG][WorkflowDefinitionSchema::CONFIG_TIMEOUT] = $timeout;
+        }
+
+        // Preserve v1.0 export shape: omit defaults.
+        if (! $this->reassignmentEnabled) {
+            $payload[WorkflowDefinitionSchema::FIELD_CONFIG][WorkflowDefinitionSchema::CONFIG_REASSIGNMENT] = [
+                WorkflowDefinitionSchema::CONFIG_ENABLED => false,
+            ];
+        }
+
+        if ($this->delegationEnabled) {
+            $payload[WorkflowDefinitionSchema::FIELD_CONFIG][WorkflowDefinitionSchema::CONFIG_DELEGATION] = [
+                WorkflowDefinitionSchema::CONFIG_ENABLED => true,
+            ];
+        }
+
+        if ($this->hasSla()) {
+            $payload[WorkflowDefinitionSchema::FIELD_CONFIG][WorkflowDefinitionSchema::CONFIG_SLA] = $this->slaConfig;
         }
 
         return $payload;
@@ -172,6 +227,38 @@ final class ApprovalNode extends AbstractWorkflowNode
             : null;
 
         return [$timeoutDueIn, $timeoutOnTimeout];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>|null
+     */
+    private static function hydrateSla(array $config): ?array
+    {
+        $sla = $config[WorkflowDefinitionSchema::CONFIG_SLA] ?? null;
+
+        if (! is_array($sla) || $sla === []) {
+            return null;
+        }
+
+        return $sla;
+    }
+
+    private static function hydrateToggle(mixed $value, bool $default): bool
+    {
+        if ($value === null) {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_array($value) && array_key_exists(WorkflowDefinitionSchema::CONFIG_ENABLED, $value)) {
+            return $value[WorkflowDefinitionSchema::CONFIG_ENABLED] === true;
+        }
+
+        return $default;
     }
 
     /**

@@ -1,6 +1,6 @@
 # Upgrading to DBFlow Core 1.0
 
-This guide summarizes breaking and behavioral changes from early alpha releases through **stable `1.0.0`**. For full release notes, see [CHANGELOG.md](CHANGELOG.md).
+This guide summarizes breaking and behavioral changes from early alpha releases through **stable `1.0.0`**. For upgrading **`1.0.x` → `1.1.0`**, see [UPGRADE-1.1.md](UPGRADE-1.1.md). For full release notes, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Stable 1.0.0
 
@@ -15,7 +15,7 @@ Pair with `dbflowlabs/filament:^1.0` and `dbflowlabs/filament-pro:^1.0` when usi
 Additive changes since `1.0.0-rc.1` (non-breaking):
 
 - `ActionFailed` event and `WorkflowLogEvent::ActionFailed` when action node handlers throw
-- Optional action node `fail_on_exception` to abort traversal via `ActionExecutionFailedException`
+- Optional action node `stop_on_error` to abort traversal via `ActionExecutionFailedException`
 - Sequential approval/rejection edge-case fixes and stricter condition expression evaluation
 
 ## Recommended upgrade path
@@ -109,4 +109,5 @@ From `1.0.0-rc.1` (unchanged at stable `1.0.0`), the following surfaces are **fr
 ## Support
 
 - [CHANGELOG.md](CHANGELOG.md) — detailed release history
+- [UPGRADE-1.1.md](UPGRADE-1.1.md) — upgrading from stable `1.0.x` to `1.1.0`
 - [GitHub Issues](https://github.com/dbflow-labs/dbflow-core/issues) — bug reports and questions

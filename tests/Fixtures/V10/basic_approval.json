@@ -1,0 +1,43 @@
+{
+  "key": "v10_basic_approval",
+  "name": "V1.0 Basic Approval",
+  "schema_version": "1.0",
+  "description": "Minimal single-approver any-mode flow used as the v1.0 compatibility baseline.",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "review",
+      "type": "approval",
+      "name": "Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "1"
+        }
+      }
+    },
+    {
+      "key": "end",
+      "type": "end",
+      "name": "End",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "end"
+    }
+  ]
+}

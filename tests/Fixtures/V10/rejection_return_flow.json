@@ -1,0 +1,59 @@
+{
+  "key": "v10_rejection_return_flow",
+  "name": "V1.0 Rejection Return Flow",
+  "schema_version": "1.0",
+  "description": "Two-stage approval graph that supports runtime RejectStrategy starter/previous_node/end return semantics.",
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start"
+    },
+    {
+      "key": "first_review",
+      "type": "approval",
+      "name": "First Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "1"
+        }
+      }
+    },
+    {
+      "key": "second_review",
+      "type": "approval",
+      "name": "Second Review",
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "2"
+        }
+      }
+    },
+    {
+      "key": "end_approved",
+      "type": "end",
+      "name": "Approved",
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "first_review"
+    },
+    {
+      "from": "first_review",
+      "to": "second_review"
+    },
+    {
+      "from": "second_review",
+      "to": "end_approved"
+    }
+  ]
+}

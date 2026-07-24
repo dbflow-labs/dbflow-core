@@ -1,0 +1,63 @@
+{
+  "key": "v10_versioned_published_workflow",
+  "name": "V1.0 Versioned Published Workflow",
+  "schema_version": "1.0",
+  "description": "Publishable definition used to assert instance binding to an immutable published version snapshot.",
+  "metadata": {
+    "fixture": "v10_versioned_published_workflow",
+    "canvas": "compatibility"
+  },
+  "nodes": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "Start",
+      "position": {
+        "x": 40,
+        "y": 80
+      }
+    },
+    {
+      "key": "review",
+      "type": "approval",
+      "name": "Version Bound Review",
+      "position": {
+        "x": 240,
+        "y": 80
+      },
+      "config": {
+        "approval_mode": "any",
+        "assignees": {
+          "type": "user",
+          "value": "1"
+        }
+      },
+      "metadata": {
+        "shape": "rect"
+      }
+    },
+    {
+      "key": "end",
+      "type": "end",
+      "name": "End",
+      "position": {
+        "x": 440,
+        "y": 80
+      },
+      "config": {
+        "status": "approved"
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": "start",
+      "to": "review",
+      "priority": 10
+    },
+    {
+      "from": "review",
+      "to": "end"
+    }
+  ]
+}

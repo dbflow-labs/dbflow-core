@@ -17,24 +17,33 @@ declare(strict_types=1);
 
 namespace DbflowLabs\Core\Validation;
 
+use DbflowLabs\Core\Capabilities\RuntimeCapabilityRegistry;
 use DbflowLabs\Core\Definitions\Blueprint;
+use DbflowLabs\Core\Definitions\DefinitionSchemaVersion;
+use DbflowLabs\Core\Definitions\Nodes\ActionNode;
 use DbflowLabs\Core\Definitions\Nodes\ApprovalNode;
 use DbflowLabs\Core\Definitions\Nodes\ConditionNode;
 use DbflowLabs\Core\Definitions\Nodes\EndNode;
 use DbflowLabs\Core\Definitions\Nodes\StartNode;
 use DbflowLabs\Core\Definitions\Transition;
 use DbflowLabs\Core\Definitions\WorkflowDefinitionSchema;
+use DbflowLabs\Core\Enums\ActionExecutionMode;
 use DbflowLabs\Core\Enums\ApprovalMode;
+use DbflowLabs\Core\Enums\ContextDataSource;
+use DbflowLabs\Core\Enums\RuntimeCapability;
 use DbflowLabs\Core\Enums\TimeoutOnTimeout;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowTopologyException;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\Actions\ReliableActionHandlerRegistry;
+use DbflowLabs\Core\Sla\SlaDuration;
+use DbflowLabs\Core\Sla\SlaPolicy;
+use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use DbflowLabs\Core\Validation\Topology\CycleDetector;
 use DbflowLabs\Core\Validation\Topology\IsolatedNodeDetector;
 use DbflowLabs\Core\Validation\Topology\ReachabilityAnalyzer;
 use DbflowLabs\Core\Validation\Topology\TerminationAnalyzer;
 use DbflowLabs\Core\Validation\Topology\WorkflowGraph;
-use DbflowLabs\Core\Support\TimeoutDueAtResolver;
 use InvalidArgumentException;
 
 final class BlueprintValidator
@@ -59,6 +68,8 @@ final class BlueprintValidator
         private readonly ReachabilityAnalyzer $reachabilityAnalyzer = new ReachabilityAnalyzer,
         private readonly TerminationAnalyzer $terminationAnalyzer = new TerminationAnalyzer,
         private readonly ?AssigneeResolverRegistry $assigneeResolverRegistry = null,
+        private readonly ?RuntimeCapabilityRegistry $runtimeCapabilityRegistry = null,
+        private readonly ?ReliableActionHandlerRegistry $reliableActionHandlerRegistry = null,
     ) {}
 
     public function validate(Blueprint $blueprint, bool $strict = true): WorkflowDefinitionValidationResult
@@ -69,6 +80,7 @@ final class BlueprintValidator
         $this->currentBlueprint = $blueprint;
 
         $this->validateBlueprintMeta($blueprint);
+        $this->validateSchemaVersion($blueprint->schemaVersion());
 
         if ($blueprint->nodes() === []) {
             if ($this->strict) {
@@ -104,6 +116,9 @@ final class BlueprintValidator
         $this->strict = $strict;
 
         $this->validateTopLevelArray($definition);
+        $this->validateSchemaVersionValue($definition[WorkflowDefinitionSchema::FIELD_SCHEMA_VERSION] ?? null);
+        $this->validateRuntimeCapabilitiesFromDefinition($definition);
+        $this->validateRawActionNodeConfigs($definition);
 
         if ($this->errors !== []) {
             return $this->result();
@@ -124,7 +139,7 @@ final class BlueprintValidator
         try {
             $blueprint = Blueprint::fromArray($definition);
         } catch (InvalidArgumentException $exception) {
-            $this->addError('nodes', 'invalid_structure', $exception->getMessage());
+            $this->addMappedHydrationError($exception->getMessage());
 
             return $this->result();
         }
@@ -238,6 +253,10 @@ final class BlueprintValidator
                 $this->validateConditionNode($nodePath, $node);
             }
 
+            if ($node instanceof ActionNode) {
+                $this->validateActionNode($nodePath, $node);
+            }
+
             if ($node instanceof EndNode) {
                 $this->validateEndNode($nodePath, $node);
             }
@@ -259,6 +278,7 @@ final class BlueprintValidator
     private function validateApprovalNode(string $nodePath, ApprovalNode $node): void
     {
         $this->validateApprovalNodeTimeout($nodePath, $node);
+        $this->validateApprovalNodeSla($nodePath, $node);
 
         $assignees = $node->assignees();
         $assigneeType = $assignees[WorkflowDefinitionSchema::ASSIGNEE_FIELD_TYPE] ?? null;
@@ -390,6 +410,77 @@ final class BlueprintValidator
         }
     }
 
+    private function validateApprovalNodeSla(string $nodePath, ApprovalNode $node): void
+    {
+        if (! $node->hasSla()) {
+            return;
+        }
+
+        $this->requireCapability(
+            RuntimeCapability::Sla,
+            $nodePath.'.config.'.WorkflowDefinitionSchema::CONFIG_SLA,
+            'SLA configuration requires the sla runtime capability.',
+        );
+
+        $slaConfig = $node->slaConfig();
+
+        if ($slaConfig === null) {
+            return;
+        }
+
+        try {
+            SlaPolicy::fromConfigArray($slaConfig);
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError(
+                $nodePath.'.config.'.WorkflowDefinitionSchema::CONFIG_SLA,
+                'invalid_value',
+                $exception->getMessage(),
+            );
+
+            return;
+        }
+
+        if ($node->hasTimeout()) {
+            $timeoutDueIn = $node->timeoutDueIn();
+            $slaDueAfter = $slaConfig[WorkflowDefinitionSchema::SLA_DUE_AFTER] ?? null;
+
+            $equivalent = is_string($timeoutDueIn)
+                && is_string($slaDueAfter)
+                && $node->timeoutOnTimeout() === null
+                && SlaDuration::isValid($timeoutDueIn)
+                && SlaDuration::isValid($slaDueAfter)
+                && SlaDuration::parse($timeoutDueIn)->totalSeconds() === SlaDuration::parse($slaDueAfter)->totalSeconds();
+
+            if (! $equivalent) {
+                $this->addError(
+                    $nodePath.'.config',
+                    'conflicting_timeout_and_sla',
+                    'Approval node cannot define conflicting timeout and SLA policies.',
+                );
+            }
+        }
+
+        $overdue = is_array($slaConfig[WorkflowDefinitionSchema::SLA_OVERDUE] ?? null)
+            ? $slaConfig[WorkflowDefinitionSchema::SLA_OVERDUE]
+            : [];
+
+        if (($overdue['approve'] ?? false) === true || ($overdue['auto_approve'] ?? false) === true) {
+            $this->addError(
+                $nodePath.'.config.'.WorkflowDefinitionSchema::CONFIG_SLA.'.overdue',
+                'unsupported_value',
+                'Automatic approval on SLA overdue is not supported.',
+            );
+        }
+
+        if (($overdue['reject'] ?? false) === true || ($overdue['auto_reject'] ?? false) === true) {
+            $this->addError(
+                $nodePath.'.config.'.WorkflowDefinitionSchema::CONFIG_SLA.'.overdue',
+                'unsupported_value',
+                'Automatic rejection on SLA overdue is not supported.',
+            );
+        }
+    }
+
     /**
      * @return array<string, mixed>|null
      */
@@ -428,6 +519,414 @@ final class BlueprintValidator
     private function validateConditionNode(string $nodePath, ConditionNode $node): void
     {
         // Condition routing predicates live on outgoing transitions (see validateConditionRoutingContract).
+    }
+
+    private function validateActionNode(string $nodePath, ActionNode $node): void
+    {
+        $mode = $node->executionMode();
+
+        if ($mode->isReliable()) {
+            $this->requireCapability(
+                RuntimeCapability::ReliableAction,
+                $nodePath.'.config.execution_mode',
+                "Action execution_mode [{$mode->value}] requires the reliable_action runtime capability.",
+            );
+        }
+
+        if ($mode->isReliable() && $node->stopOnError()) {
+            $this->addError(
+                $nodePath.'.config.stop_on_error',
+                'invalid_value',
+                'stop_on_error cannot be combined with reliable execution modes.',
+            );
+        }
+
+        if ($mode->isReliable()) {
+            $actionKey = $node->actionKey();
+
+            if ($actionKey === '') {
+                $this->addError(
+                    $nodePath.'.config.action_key',
+                    'required',
+                    'Reliable action nodes require a non-empty action_key.',
+                );
+            } elseif ($this->reliableActionHandlerRegistry !== null && ! $this->reliableActionHandlerRegistry->has($actionKey)) {
+                $this->addError(
+                    $nodePath.'.config.action_key',
+                    'missing_reliable_action_handler',
+                    "Reliable action handler [{$actionKey}] is not registered.",
+                );
+            }
+
+            if ($actionKey === 'outbound_webhook') {
+                $this->requireCapability(
+                    RuntimeCapability::OutboundWebhook,
+                    $nodePath.'.config.action_key',
+                    'Action outbound_webhook requires the outbound_webhook runtime capability.',
+                );
+            }
+        }
+
+        if ($node->maxAttempts() !== null && $node->maxAttempts() < 1) {
+            $this->addError(
+                $nodePath.'.config.max_attempts',
+                'invalid_value',
+                'Action max_attempts must be a positive integer when provided.',
+            );
+        }
+
+        if ($node->timeoutSeconds() !== null && $node->timeoutSeconds() < 1) {
+            $this->addError(
+                $nodePath.'.config.timeout_seconds',
+                'invalid_value',
+                'Action timeout_seconds must be a positive integer when provided.',
+            );
+        }
+
+        if ($node->retry() !== null) {
+            $retry = $node->retry();
+
+            if ($retry === []) {
+                $this->addError(
+                    $nodePath.'.config.retry',
+                    'invalid_value',
+                    'Action retry configuration must be a non-empty object when provided.',
+                );
+            }
+
+            if (isset($retry['max_attempts']) && (! is_int($retry['max_attempts']) || $retry['max_attempts'] < 1)) {
+                $this->addError(
+                    $nodePath.'.config.retry.max_attempts',
+                    'invalid_value',
+                    'Action retry.max_attempts must be a positive integer.',
+                );
+            }
+
+            if (isset($retry['backoff_seconds']) && (! is_int($retry['backoff_seconds']) || $retry['backoff_seconds'] < 0)) {
+                $this->addError(
+                    $nodePath.'.config.retry.backoff_seconds',
+                    'invalid_value',
+                    'Action retry.backoff_seconds must be a non-negative integer.',
+                );
+            }
+        }
+
+        if (($node->maxAttempts() !== null || $node->retry() !== null || $node->timeoutSeconds() !== null || $node->allowManualSkip())
+            && $mode->isLegacy()
+        ) {
+            $this->requireCapability(
+                RuntimeCapability::ReliableAction,
+                $nodePath.'.config',
+                'Reliable Action configuration fields require the reliable_action runtime capability.',
+            );
+        }
+    }
+
+    private function validateSchemaVersion(string $schemaVersion): void
+    {
+        $this->validateSchemaVersionValue($schemaVersion);
+    }
+
+    private function validateSchemaVersionValue(mixed $schemaVersion): void
+    {
+        try {
+            DefinitionSchemaVersion::fromMixed($schemaVersion);
+        } catch (InvalidArgumentException $exception) {
+            $this->addError(
+                WorkflowDefinitionSchema::FIELD_SCHEMA_VERSION,
+                'unsupported_schema_version',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     */
+    private function validateRuntimeCapabilitiesFromDefinition(array $definition): void
+    {
+        if (array_key_exists(WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY, $definition)) {
+            $contextPolicy = $definition[WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY];
+
+            if (! is_array($contextPolicy)) {
+                $this->addError(
+                    WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY,
+                    'invalid_value',
+                    'context_policy must be an object when provided.',
+                );
+            } else {
+                $this->requireCapability(
+                    RuntimeCapability::ContextSchemaV11,
+                    WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY,
+                    'context_policy requires the context_schema_v1_1 runtime capability.',
+                );
+
+                $dataSource = $contextPolicy[WorkflowDefinitionSchema::CONTEXT_POLICY_DATA_SOURCE] ?? null;
+
+                if ($dataSource === null || $dataSource === '') {
+                    // Default snapshot semantics; no extra capability beyond context_schema_v1_1.
+                } elseif (! is_string($dataSource)) {
+                    $this->addError(
+                        WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY.'.'.WorkflowDefinitionSchema::CONTEXT_POLICY_DATA_SOURCE,
+                        'invalid_value',
+                        'context_policy.data_source must be snapshot or live.',
+                    );
+                } else {
+                    $source = ContextDataSource::tryFrom($dataSource);
+
+                    if ($source === null) {
+                        $this->addError(
+                            WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY.'.'.WorkflowDefinitionSchema::CONTEXT_POLICY_DATA_SOURCE,
+                            'invalid_value',
+                            'context_policy.data_source must be snapshot or live.',
+                        );
+                    } elseif ($source === ContextDataSource::Live) {
+                        $this->requireCapability(
+                            RuntimeCapability::LiveContext,
+                            WorkflowDefinitionSchema::FIELD_CONTEXT_POLICY.'.'.WorkflowDefinitionSchema::CONTEXT_POLICY_DATA_SOURCE,
+                            'Live context requires the live_context runtime capability.',
+                        );
+                    }
+                }
+            }
+        }
+
+        foreach (['delegation', 'delegations'] as $forbiddenRoot) {
+            if (array_key_exists($forbiddenRoot, $definition)) {
+                $this->addError(
+                    $forbiddenRoot,
+                    'unsupported_definition_field',
+                    "Definition field [{$forbiddenRoot}] is not supported; use approval node config.delegation.enabled and Core delegation rules.",
+                );
+            }
+        }
+
+        foreach (['sla', 'webhook', 'outbound_webhook'] as $forbiddenRoot) {
+            if (array_key_exists($forbiddenRoot, $definition)) {
+                $capability = $forbiddenRoot === 'sla'
+                    ? RuntimeCapability::Sla
+                    : RuntimeCapability::OutboundWebhook;
+
+                $this->requireCapability(
+                    $capability,
+                    $forbiddenRoot,
+                    "Definition field [{$forbiddenRoot}] requires runtime capability [{$capability->value}].",
+                );
+            }
+        }
+
+        $nodes = $definition[WorkflowDefinitionSchema::FIELD_NODES] ?? null;
+
+        if (! is_array($nodes)) {
+            return;
+        }
+
+        foreach ($nodes as $index => $node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            $nodeType = $node[WorkflowDefinitionSchema::FIELD_TYPE] ?? null;
+            $config = is_array($node[WorkflowDefinitionSchema::FIELD_CONFIG] ?? null)
+                ? $node[WorkflowDefinitionSchema::FIELD_CONFIG]
+                : [];
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_DELEGATION, $config)) {
+                $delegationConfig = $config[WorkflowDefinitionSchema::CONFIG_DELEGATION];
+                $enabled = $this->toggleEnabled($delegationConfig);
+
+                if ($nodeType !== WorkflowDefinitionSchema::NODE_TYPE_APPROVAL) {
+                    $this->addError(
+                        'nodes.'.$index.'.config.delegation',
+                        'invalid_node_type',
+                        'delegation configuration is only valid on approval nodes.',
+                    );
+                } elseif ($enabled) {
+                    $this->requireCapability(
+                        RuntimeCapability::Delegation,
+                        'nodes.'.$index.'.config.delegation',
+                        'Node config [delegation] requires runtime capability [delegation].',
+                    );
+                }
+            }
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_REASSIGNMENT, $config)) {
+                $reassignmentConfig = $config[WorkflowDefinitionSchema::CONFIG_REASSIGNMENT];
+
+                if ($nodeType !== WorkflowDefinitionSchema::NODE_TYPE_APPROVAL) {
+                    $this->addError(
+                        'nodes.'.$index.'.config.reassignment',
+                        'invalid_node_type',
+                        'reassignment configuration is only valid on approval nodes.',
+                    );
+                } elseif (! $this->isValidToggleConfig($reassignmentConfig)) {
+                    $this->addError(
+                        'nodes.'.$index.'.config.reassignment',
+                        'invalid_value',
+                        'reassignment must be a boolean or an object with an enabled boolean.',
+                    );
+                }
+            }
+
+            foreach (['sla', 'webhook', 'outbound_webhook'] as $forbiddenConfigKey) {
+                if (array_key_exists($forbiddenConfigKey, $config)) {
+                    $capability = match ($forbiddenConfigKey) {
+                        'sla' => RuntimeCapability::Sla,
+                        default => RuntimeCapability::OutboundWebhook,
+                    };
+
+                    $this->requireCapability(
+                        $capability,
+                        'nodes.'.$index.'.config.'.$forbiddenConfigKey,
+                        "Node config [{$forbiddenConfigKey}] requires runtime capability [{$capability->value}].",
+                    );
+                }
+            }
+        }
+    }
+
+    private function toggleEnabled(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_array($value) && array_key_exists(WorkflowDefinitionSchema::CONFIG_ENABLED, $value)) {
+            return $value[WorkflowDefinitionSchema::CONFIG_ENABLED] === true;
+        }
+
+        return false;
+    }
+
+    private function isValidToggleConfig(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return true;
+        }
+
+        if (! is_array($value) || ! array_key_exists(WorkflowDefinitionSchema::CONFIG_ENABLED, $value)) {
+            return false;
+        }
+
+        return is_bool($value[WorkflowDefinitionSchema::CONFIG_ENABLED]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     */
+    private function validateRawActionNodeConfigs(array $definition): void
+    {
+        $nodes = $definition[WorkflowDefinitionSchema::FIELD_NODES] ?? null;
+
+        if (! is_array($nodes)) {
+            return;
+        }
+
+        foreach ($nodes as $index => $node) {
+            if (! is_array($node) || ($node[WorkflowDefinitionSchema::FIELD_TYPE] ?? null) !== WorkflowDefinitionSchema::NODE_TYPE_ACTION) {
+                continue;
+            }
+
+            $nodePath = 'nodes.'.$index;
+            $config = is_array($node[WorkflowDefinitionSchema::FIELD_CONFIG] ?? null)
+                ? $node[WorkflowDefinitionSchema::FIELD_CONFIG]
+                : [];
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_EXECUTION_MODE, $config)) {
+                try {
+                    ActionExecutionMode::normalize($config[WorkflowDefinitionSchema::CONFIG_EXECUTION_MODE]);
+                } catch (InvalidArgumentException $exception) {
+                    $this->addError(
+                        $nodePath.'.config.execution_mode',
+                        'invalid_value',
+                        $exception->getMessage(),
+                    );
+                }
+            }
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_MAX_ATTEMPTS, $config)) {
+                $value = $config[WorkflowDefinitionSchema::CONFIG_MAX_ATTEMPTS];
+
+                if (! $this->isPositiveIntLike($value)) {
+                    $this->addError(
+                        $nodePath.'.config.max_attempts',
+                        'invalid_value',
+                        'Action max_attempts must be a positive integer when provided.',
+                    );
+                }
+            }
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_ACTION_TIMEOUT, $config)) {
+                $value = $config[WorkflowDefinitionSchema::CONFIG_ACTION_TIMEOUT];
+
+                if (! $this->isPositiveIntLike($value)) {
+                    $this->addError(
+                        $nodePath.'.config.timeout_seconds',
+                        'invalid_value',
+                        'Action timeout_seconds must be a positive integer when provided.',
+                    );
+                }
+            }
+
+            if (array_key_exists(WorkflowDefinitionSchema::CONFIG_RETRY, $config)) {
+                $retry = $config[WorkflowDefinitionSchema::CONFIG_RETRY];
+
+                if (! is_array($retry) || $retry === []) {
+                    $this->addError(
+                        $nodePath.'.config.retry',
+                        'invalid_value',
+                        'Action retry configuration must be a non-empty object when provided.',
+                    );
+                }
+            }
+        }
+    }
+
+    private function isPositiveIntLike(mixed $value): bool
+    {
+        if (is_int($value) && $value >= 1) {
+            return true;
+        }
+
+        return is_string($value) && ctype_digit($value) && (int) $value >= 1;
+    }
+
+    private function addMappedHydrationError(string $message): void
+    {
+        if (str_contains($message, 'config.execution_mode')) {
+            $this->addError('nodes', 'invalid_value', $message);
+
+            return;
+        }
+
+        if (str_contains($message, 'config.max_attempts')) {
+            $this->addError('nodes', 'invalid_value', $message);
+
+            return;
+        }
+
+        if (str_contains($message, 'config.timeout_seconds')) {
+            $this->addError('nodes', 'invalid_value', $message);
+
+            return;
+        }
+
+        if (str_contains($message, 'config.retry')) {
+            $this->addError('nodes', 'invalid_value', $message);
+
+            return;
+        }
+
+        $this->addError('nodes', 'invalid_structure', $message);
+    }
+
+    private function requireCapability(RuntimeCapability $capability, string $path, string $message): void
+    {
+        if ($this->runtimeCapabilityRegistry !== null && $this->runtimeCapabilityRegistry->has($capability)) {
+            return;
+        }
+
+        $this->addError($path, 'missing_runtime_capability', $message);
     }
 
     private function validateEndNode(string $nodePath, EndNode $node): void

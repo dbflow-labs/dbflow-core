@@ -27,11 +27,13 @@ use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
 use DbflowLabs\Core\Events\TaskReassigned;
 use DbflowLabs\Core\Exceptions\TaskNotPendingException;
+use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Exceptions\UserCannotReassignTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowLog;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\WorkflowTaskQueryService;
 use DbflowLabs\Core\Tests\Concerns\BuildsMinimalPublishedWorkflow;
 use DbflowLabs\Core\Tests\Concerns\LoadsBlueprintFixtures;
 use DbflowLabs\Core\Tests\Concerns\RegistersEngineTestResources;
@@ -339,6 +341,79 @@ final class ReassignTaskTest extends TestCase
 
         $this->assertSame(1, $approvedCount);
         $this->assertSame(WorkflowTaskStatus::Pending, $task->fresh()->status);
+    }
+
+    #[Test]
+    public function previous_effective_assignee_cannot_approve_after_reassignment(): void
+    {
+        $assignee = TestUser::query()->create([
+            'name' => 'From Assignee',
+            'email' => 'reassign-approve-from@dbflow.dev',
+        ]);
+
+        $replacement = TestUser::query()->create([
+            'name' => 'To Assignee',
+            'email' => 'reassign-approve-to@dbflow.dev',
+        ]);
+
+        $this->createMinimalPublishedWorkflow(
+            'reassign_approve_guard_flow',
+            'Reassign Approve Guard Flow',
+            (string) $assignee->getKey(),
+        );
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'REASSIGN-APPROVE-001']);
+        $instance = DBFlow::start('reassign_approve_guard_flow', $subject, $assignee->getKey());
+        $task = $instance->tasks()->where('status', WorkflowTaskStatus::Pending)->firstOrFail();
+
+        DBFlow::reassign(
+            $task,
+            $assignee->getKey(),
+            (string) $replacement->getKey(),
+            'Handing off while on leave.',
+        );
+
+        $service = app(WorkflowTaskQueryService::class);
+        $this->assertSame(0, $service->countPendingTasksForUser((string) $assignee->getKey()));
+        $this->assertSame(1, $service->countPendingTasksForUser((string) $replacement->getKey()));
+
+        $this->expectException(UserCannotApproveTaskException::class);
+        DBFlow::approve($task->fresh(), $assignee->getKey());
+    }
+
+    #[Test]
+    public function new_assignee_can_approve_after_reassignment(): void
+    {
+        $assignee = TestUser::query()->create([
+            'name' => 'From Assignee',
+            'email' => 'reassign-approve-new-from@dbflow.dev',
+        ]);
+
+        $replacement = TestUser::query()->create([
+            'name' => 'To Assignee',
+            'email' => 'reassign-approve-new-to@dbflow.dev',
+        ]);
+
+        $this->createMinimalPublishedWorkflow(
+            'reassign_approve_success_flow',
+            'Reassign Approve Success Flow',
+            (string) $assignee->getKey(),
+        );
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'REASSIGN-APPROVE-OK-001']);
+        $instance = DBFlow::start('reassign_approve_success_flow', $subject, $assignee->getKey());
+        $task = $instance->tasks()->where('status', WorkflowTaskStatus::Pending)->firstOrFail();
+
+        DBFlow::reassign(
+            $task,
+            $assignee->getKey(),
+            (string) $replacement->getKey(),
+            'Handing off while on leave.',
+        );
+
+        $result = DBFlow::approve($task->fresh(), $replacement->getKey());
+
+        $this->assertSame(WorkflowInstanceStatus::Approved, $result->status);
     }
 
     private function publishTeamWorkflow(string $key, ApprovalMode $approvalMode): void

@@ -25,7 +25,6 @@ use DbflowLabs\Core\Definitions\Nodes\EndNode;
 use DbflowLabs\Core\Enums\ApprovalMode;
 use DbflowLabs\Core\Enums\WorkflowInstanceStatus;
 use DbflowLabs\Core\Enums\WorkflowLogEvent;
-use DbflowLabs\Core\Enums\WorkflowTaskAssignmentStatus;
 use DbflowLabs\Core\Enums\WorkflowTaskStatus;
 use DbflowLabs\Core\Events\TaskCreated;
 use DbflowLabs\Core\Events\WorkflowCompleted;
@@ -35,7 +34,9 @@ use DbflowLabs\Core\Exceptions\WorkflowAlreadyRunningException;
 use DbflowLabs\Core\Exceptions\WorkflowExceptionTranslator;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
-use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\AssignmentMaterializer;
+use DbflowLabs\Core\Services\Sla\CancelTaskSlaEvents;
+use DbflowLabs\Core\Services\Sla\TaskSlaInitializer;
 use DbflowLabs\Core\Services\TransitionResolver;
 use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionResolver;
@@ -65,6 +66,8 @@ final class StartWorkflow
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
         private readonly TimeoutDueAtResolver $timeoutDueAtResolver,
         private readonly WorkflowLogger $logger,
+        private readonly AssignmentMaterializer $assignmentMaterializer,
+        private readonly TaskSlaInitializer $taskSlaInitializer,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
         private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
     ) {}
@@ -153,6 +156,10 @@ final class StartWorkflow
                 return $instance->refresh();
             }
 
+            if ($result === 'blocked') {
+                return $instance->refresh();
+            }
+
             $this->hooksForKey($this->hooksRegistry, $workflowKey)->onStarted($instance->refresh());
 
             return $instance->refresh()->load(['tasks.assignments']);
@@ -216,10 +223,22 @@ final class StartWorkflow
             'node_name' => $node->name(),
             'status' => WorkflowTaskStatus::Pending,
             'approval_mode' => $approvalMode,
-            'due_at' => $this->timeoutDueAtResolver->resolveDueAt($node->timeoutDueIn()),
+            'due_at' => $node->hasSla()
+                ? null
+                : $this->timeoutDueAtResolver->resolveDueAt($node->timeoutDueIn()),
         ]);
 
-        $this->createAssignments($task, $approvalMode, $assigneeUserIds);
+        $this->assignmentMaterializer->createAssignments(
+            $task,
+            $instance,
+            $approvalMode,
+            $assigneeUserIds,
+            is_string($key = $instance->workflow()->value('key')) ? $key : null,
+            $nodeKey,
+            $node->delegationEnabled(),
+        );
+
+        $this->taskSlaInitializer->initialize($task->refresh(), $instance, $node);
 
         $instance->forceFill(['current_node_key' => $nodeKey])->save();
 
@@ -241,23 +260,6 @@ final class StartWorkflow
             ->onTaskCreated($task, $instance);
 
         return $task;
-    }
-
-    /**
-     * @param  list<int|string>  $assigneeUserIds
-     */
-    private function createAssignments(WorkflowTask $task, ApprovalMode $approvalMode, array $assigneeUserIds): void
-    {
-        $sequence = 1;
-
-        foreach ($assigneeUserIds as $assigneeUserId) {
-            WorkflowTaskAssignment::query()->create([
-                'workflow_task_id' => $task->getKey(),
-                'assignee_user_id' => $assigneeUserId,
-                'status' => WorkflowTaskAssignmentStatus::Pending,
-                'sequence' => $approvalMode->isSequential() ? $sequence++ : null,
-            ]);
-        }
     }
 
 }

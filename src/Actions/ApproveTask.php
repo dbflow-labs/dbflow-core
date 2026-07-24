@@ -35,6 +35,9 @@ use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\AssignmentMaterializer;
+use DbflowLabs\Core\Services\Sla\CancelTaskSlaEvents;
+use DbflowLabs\Core\Services\Sla\TaskSlaInitializer;
 use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
 use DbflowLabs\Core\Services\WorkflowNodeTraverser;
@@ -60,6 +63,9 @@ final class ApproveTask
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
         private readonly TimeoutDueAtResolver $timeoutDueAtResolver,
         private readonly WorkflowLogger $logger,
+        private readonly AssignmentMaterializer $assignmentMaterializer,
+        private readonly TaskSlaInitializer $taskSlaInitializer,
+        private readonly CancelTaskSlaEvents $cancelTaskSlaEvents,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
         private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
     ) {}
@@ -102,6 +108,8 @@ final class ApproveTask
                 'completed_at' => now(),
             ])->save();
 
+            $this->cancelTaskSlaEvents->cancelForTask($lockedTask->refresh(), 'task_approved');
+
             $this->logger->log(
                 $instance,
                 WorkflowLogEvent::TaskApproved,
@@ -125,18 +133,14 @@ final class ApproveTask
             throw new UserCannotApproveTaskException('Actor user id is invalid.');
         }
 
-        $assignment = WorkflowTaskAssignment::query()
-            ->where('workflow_task_id', $task->getKey())
-            ->where('assignee_user_id', $actorUserId)
-            ->where('status', WorkflowTaskAssignmentStatus::Pending)
-            ->first();
+        $assignments = $this->pendingAssignmentsForActor($task, (string) $actorUserId, $approvalMode);
 
-        if ($assignment === null) {
+        if ($assignments->isEmpty()) {
             throw new UserCannotApproveTaskException('Actor does not have a pending assignment for this task.');
         }
 
         if ($approvalMode->isSequential()) {
-            $this->assertActorIsCurrentSequentialAssignee($task, $assignment);
+            $this->assertActorIsCurrentSequentialAssignee($task, $assignments->first());
         }
     }
 
@@ -156,14 +160,26 @@ final class ApproveTask
     private function applyApprovalMode(WorkflowTask $task, ApprovalMode $approvalMode, int|string|null $actorUserId): bool
     {
         if ($actorUserId !== null) {
-            WorkflowTaskAssignment::query()
-                ->where('workflow_task_id', $task->getKey())
-                ->where('assignee_user_id', $actorUserId)
-                ->where('status', WorkflowTaskAssignmentStatus::Pending)
-                ->update([
-                    'status' => WorkflowTaskAssignmentStatus::Approved,
-                    'acted_at' => now(),
-                ]);
+            $assignments = $this->pendingAssignmentsForActor($task, (string) $actorUserId, $approvalMode);
+
+            if ($approvalMode->isAny()) {
+                /** @var WorkflowTaskAssignment|null $first */
+                $first = $assignments->first();
+
+                if ($first instanceof WorkflowTaskAssignment) {
+                    $first->forceFill([
+                        'status' => WorkflowTaskAssignmentStatus::Approved,
+                        'acted_at' => now(),
+                    ])->save();
+                }
+            } else {
+                foreach ($assignments as $assignment) {
+                    $assignment->forceFill([
+                        'status' => WorkflowTaskAssignmentStatus::Approved,
+                        'acted_at' => now(),
+                    ])->save();
+                }
+            }
         }
 
         if ($approvalMode->isAny()) {
@@ -188,6 +204,36 @@ final class ApproveTask
         }
 
         return true;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, WorkflowTaskAssignment>
+     */
+    private function pendingAssignmentsForActor(
+        WorkflowTask $task,
+        string $actorUserId,
+        ApprovalMode $approvalMode,
+    ) {
+        $query = WorkflowTaskAssignment::query()
+            ->where('workflow_task_id', $task->getKey())
+            ->where('status', WorkflowTaskAssignmentStatus::Pending)
+            ->orderBy('id');
+
+        $query = WorkflowTaskAssignment::constrainActionableBy($query, $actorUserId);
+
+        if ($approvalMode->isSequential()) {
+            $currentSequence = WorkflowTaskAssignment::query()
+                ->where('workflow_task_id', $task->getKey())
+                ->where('status', WorkflowTaskAssignmentStatus::Pending)
+                ->whereNotNull('sequence')
+                ->min('sequence');
+
+            if ($currentSequence !== null) {
+                $query->where('sequence', (int) $currentSequence);
+            }
+        }
+
+        return $query->get();
     }
 
     private function advanceWorkflow(WorkflowInstance $instance, WorkflowTask $task, mixed $actor): WorkflowInstance
@@ -272,10 +318,22 @@ final class ApproveTask
             'node_name' => $node->name(),
             'status' => WorkflowTaskStatus::Pending,
             'approval_mode' => $approvalMode,
-            'due_at' => $this->timeoutDueAtResolver->resolveDueAt($node->timeoutDueIn()),
+            'due_at' => $node->hasSla()
+                ? null
+                : $this->timeoutDueAtResolver->resolveDueAt($node->timeoutDueIn()),
         ]);
 
-        $this->createAssignments($task, $approvalMode, $assigneeUserIds);
+        $this->assignmentMaterializer->createAssignments(
+            $task,
+            $instance,
+            $approvalMode,
+            $assigneeUserIds,
+            is_string($key = $instance->workflow()->value('key')) ? $key : null,
+            $nodeKey,
+            $node->delegationEnabled(),
+        );
+
+        $this->taskSlaInitializer->initialize($task->refresh(), $instance, $node);
 
         $instance->forceFill(['current_node_key' => $nodeKey])->save();
 
@@ -297,23 +355,6 @@ final class ApproveTask
             ->onTaskCreated($task, $instance);
 
         return $task;
-    }
-
-    /**
-     * @param  list<int|string>  $assigneeUserIds
-     */
-    private function createAssignments(WorkflowTask $task, ApprovalMode $approvalMode, array $assigneeUserIds): void
-    {
-        $sequence = 1;
-
-        foreach ($assigneeUserIds as $assigneeUserId) {
-            WorkflowTaskAssignment::query()->create([
-                'workflow_task_id' => $task->getKey(),
-                'assignee_user_id' => $assigneeUserId,
-                'status' => WorkflowTaskAssignmentStatus::Pending,
-                'sequence' => $approvalMode->isSequential() ? $sequence++ : null,
-            ]);
-        }
     }
 
 }

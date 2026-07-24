@@ -1,5 +1,9 @@
 /vendor/
 /build/
+/scripts/
+/.rc-certification/
+composer.local.json
+composer.integration.json
 .phpunit.result.cache
 .phpunit.cache/
 .idea/
@@ -12,3 +16,11 @@
 /docs/*
 !/docs/integration/
 !/docs/integration/**
+!/docs/releases/
+!/docs/releases/**
+!/docs/architecture/
+!/docs/architecture/**
+!/docs/reference/
+!/docs/reference/**
+!/docs/operations/
+!/docs/operations/**

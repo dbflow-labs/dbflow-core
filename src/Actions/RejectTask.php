@@ -34,6 +34,9 @@ use DbflowLabs\Core\Exceptions\UserCannotApproveTaskException;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\AssignmentMaterializer;
+use DbflowLabs\Core\Services\Sla\CancelTaskSlaEvents;
+use DbflowLabs\Core\Services\Sla\TaskSlaInitializer;
 use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
@@ -56,6 +59,9 @@ final class RejectTask
         private readonly ApprovalNodeAssigneeResolver $approvalNodeAssigneeResolver,
         private readonly TimeoutDueAtResolver $timeoutDueAtResolver,
         private readonly WorkflowLogger $logger,
+        private readonly AssignmentMaterializer $assignmentMaterializer,
+        private readonly TaskSlaInitializer $taskSlaInitializer,
+        private readonly CancelTaskSlaEvents $cancelTaskSlaEvents,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
         private readonly ?TaskHooksRegistry $taskHooksRegistry = null,
     ) {}
@@ -101,6 +107,8 @@ final class RejectTask
                 'status' => WorkflowTaskStatus::Rejected,
                 'completed_at' => now(),
             ])->save();
+
+            $this->cancelTaskSlaEvents->cancelForTask($lockedTask->refresh(), 'task_rejected');
 
             $this->logger->log(
                 $instance,
@@ -245,10 +253,22 @@ final class RejectTask
             'node_name' => $rollbackNode->name(),
             'status' => WorkflowTaskStatus::Pending,
             'approval_mode' => $approvalMode,
-            'due_at' => $this->timeoutDueAtResolver->resolveDueAt($rollbackNode->timeoutDueIn()),
+            'due_at' => $rollbackNode->hasSla()
+                ? null
+                : $this->timeoutDueAtResolver->resolveDueAt($rollbackNode->timeoutDueIn()),
         ]);
 
-        $this->createAssignments($rollbackTask, $approvalMode, $assigneeUserIds);
+        $this->assignmentMaterializer->createAssignments(
+            $rollbackTask,
+            $instance,
+            $approvalMode,
+            $assigneeUserIds,
+            is_string($key = $instance->workflow()->value('key')) ? $key : null,
+            $nodeKey,
+            $rollbackNode->delegationEnabled(),
+        );
+
+        $this->taskSlaInitializer->initialize($rollbackTask->refresh(), $instance, $rollbackNode);
 
         $instance->forceFill(['current_node_key' => $nodeKey])->save();
 
@@ -271,23 +291,6 @@ final class RejectTask
             ->onTaskCreated($rollbackTask, $instance);
 
         return $rollbackTask;
-    }
-
-    /**
-     * @param  list<int|string>  $assigneeUserIds
-     */
-    private function createAssignments(WorkflowTask $task, ApprovalMode $approvalMode, array $assigneeUserIds): void
-    {
-        $sequence = 1;
-
-        foreach ($assigneeUserIds as $assigneeUserId) {
-            WorkflowTaskAssignment::query()->create([
-                'workflow_task_id' => $task->getKey(),
-                'assignee_user_id' => $assigneeUserId,
-                'status' => WorkflowTaskAssignmentStatus::Pending,
-                'sequence' => $approvalMode->isSequential() ? $sequence++ : null,
-            ]);
-        }
     }
 
     private function terminateWorkflow(
@@ -320,14 +323,19 @@ final class RejectTask
     private function closeCurrentTaskAssignments(WorkflowTask $task, int|string|null $actorUserId): void
     {
         if ($actorUserId !== null) {
-            WorkflowTaskAssignment::query()
-                ->where('workflow_task_id', $task->getKey())
-                ->where('assignee_user_id', $actorUserId)
-                ->where('status', WorkflowTaskAssignmentStatus::Pending)
-                ->update([
+            $assignments = WorkflowTaskAssignment::constrainActionableBy(
+                WorkflowTaskAssignment::query()
+                    ->where('workflow_task_id', $task->getKey())
+                    ->where('status', WorkflowTaskAssignmentStatus::Pending),
+                (string) $actorUserId,
+            )->get();
+
+            foreach ($assignments as $assignment) {
+                $assignment->forceFill([
                     'status' => WorkflowTaskAssignmentStatus::Rejected,
                     'acted_at' => now(),
-                ]);
+                ])->save();
+            }
         }
 
         WorkflowTaskAssignment::query()
@@ -345,11 +353,13 @@ final class RejectTask
             throw new UserCannotApproveTaskException('Actor user id is invalid.');
         }
 
-        $assignment = WorkflowTaskAssignment::query()
-            ->where('workflow_task_id', $task->getKey())
-            ->where('assignee_user_id', $actorUserId)
-            ->where('status', WorkflowTaskAssignmentStatus::Pending)
-            ->first();
+        $assignment = WorkflowTaskAssignment::constrainActionableBy(
+            WorkflowTaskAssignment::query()
+                ->where('workflow_task_id', $task->getKey())
+                ->where('status', WorkflowTaskAssignmentStatus::Pending)
+                ->orderBy('id'),
+            (string) $actorUserId,
+        )->first();
 
         if ($assignment === null) {
             throw new UserCannotApproveTaskException('Actor does not have a pending assignment for this task.');

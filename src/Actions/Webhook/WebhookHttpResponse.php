@@ -1,0 +1,55 @@
+<?php
+
+/**
+ * This file is part of the dbflow-labs/core package.
+ *
+ * Copyright (c) 2026 Baron Wang <hello@dbflow.dev>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ *
+ * @license MIT
+ * @link    https://dbflow.dev
+ * @see     https://github.com/dbflow-labs/dbflow-core
+ */
+
+declare(strict_types=1);
+
+namespace DbflowLabs\Core\Actions\Webhook;
+
+final class WebhookHttpResponse
+{
+    /**
+     * @param  array<string, list<string>|string>  $headers
+     */
+    public function __construct(
+        public readonly int $status,
+        public readonly string $body,
+        public readonly array $headers = [],
+    ) {}
+
+    public function locationHeader(): ?string
+    {
+        foreach ($this->headers as $name => $value) {
+            if (strtolower((string) $name) !== 'location') {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $first = $value[0] ?? null;
+
+                return is_string($first) ? $first : null;
+            }
+
+            return is_string($value) ? $value : null;
+        }
+
+        return null;
+    }
+
+    public function isRedirect(): bool
+    {
+        return in_array($this->status, [301, 302, 303, 307, 308], true)
+            && $this->locationHeader() !== null;
+    }
+}

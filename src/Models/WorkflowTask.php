@@ -38,6 +38,9 @@ class WorkflowTask extends Model
         'status',
         'approval_mode',
         'due_at',
+        'overdue_at',
+        'sla_policy_snapshot',
+        'sla_policy_source',
         'completed_at',
     ];
 
@@ -49,6 +52,8 @@ class WorkflowTask extends Model
             'status' => WorkflowTaskStatus::class,
             'approval_mode' => ApprovalMode::class,
             'due_at' => 'datetime',
+            'overdue_at' => 'datetime',
+            'sla_policy_snapshot' => 'array',
             'completed_at' => 'datetime',
         ];
     }

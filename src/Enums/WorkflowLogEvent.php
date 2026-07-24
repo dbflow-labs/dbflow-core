@@ -30,8 +30,23 @@ enum WorkflowLogEvent: string
     case TaskSkipped = 'task_skipped';
     case TaskReassigned = 'task_reassigned';
     case TaskTimedOut = 'task_timed_out';
+    case TaskBecameOverdue = 'task_became_overdue';
+    case TaskSlaReminderDispatched = 'task_sla_reminder_dispatched';
+    case TaskSlaEscalated = 'task_sla_escalated';
+    case TaskAssignedViaDelegation = 'task_assigned_via_delegation';
+    case DelegationCreated = 'delegation_created';
+    case DelegationRevoked = 'delegation_revoked';
+    case PendingTasksMigrationCompleted = 'pending_tasks_migration_completed';
     case ActionExecuted = 'action_executed';
     case ActionFailed = 'action_failed';
+    case ActionExecutionQueued = 'action_execution_queued';
+    case ActionExecutionSucceeded = 'action_execution_succeeded';
+    case ActionExecutionFailed = 'action_execution_failed';
+    case ActionExecutionExhausted = 'action_execution_exhausted';
+    case ActionExecutionSkipped = 'action_execution_skipped';
+    case ActionExecutionManuallyRetried = 'action_execution_manually_retried';
+    case ActionExecutionCancelled = 'action_execution_cancelled';
+    case ActionExecutionRecovered = 'action_execution_recovered';
 
     public function label(): string
     {
@@ -47,8 +62,23 @@ enum WorkflowLogEvent: string
             self::TaskSkipped => 'Task skipped',
             self::TaskReassigned => 'Task reassigned',
             self::TaskTimedOut => 'Task timed out',
+            self::TaskBecameOverdue => 'Task became overdue',
+            self::TaskSlaReminderDispatched => 'Task SLA reminder dispatched',
+            self::TaskSlaEscalated => 'Task SLA escalated',
+            self::TaskAssignedViaDelegation => 'Task assigned via delegation',
+            self::DelegationCreated => 'Delegation created',
+            self::DelegationRevoked => 'Delegation revoked',
+            self::PendingTasksMigrationCompleted => 'Pending tasks migration completed',
             self::ActionExecuted => 'Action node executed',
             self::ActionFailed => 'Action node execution failed',
+            self::ActionExecutionQueued => 'Action execution queued',
+            self::ActionExecutionSucceeded => 'Action execution succeeded',
+            self::ActionExecutionFailed => 'Action execution failed',
+            self::ActionExecutionExhausted => 'Action execution exhausted retries',
+            self::ActionExecutionSkipped => 'Action execution skipped',
+            self::ActionExecutionManuallyRetried => 'Action execution manually retried',
+            self::ActionExecutionCancelled => 'Action execution cancelled',
+            self::ActionExecutionRecovered => 'Action execution recovered',
         };
     }
 }

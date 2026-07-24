@@ -17,18 +17,38 @@ declare(strict_types=1);
 
 namespace DbflowLabs\Core\Validation;
 
+use DbflowLabs\Core\Capabilities\RuntimeCapabilityRegistry;
 use DbflowLabs\Core\Exceptions\InvalidWorkflowDefinitionException;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\Actions\ReliableActionHandlerRegistry;
 
 final class WorkflowDefinitionValidator
 {
-    public function __construct(
-        private readonly BlueprintValidator $blueprintValidator = new BlueprintValidator,
-    ) {}
+    private readonly BlueprintValidator $blueprintValidator;
+
+    public function __construct(?BlueprintValidator $blueprintValidator = null)
+    {
+        $this->blueprintValidator = $blueprintValidator ?? self::defaultBlueprintValidator();
+    }
 
     public static function withAssigneeResolverRegistry(AssigneeResolverRegistry $registry): self
     {
-        return new self(new BlueprintValidator(assigneeResolverRegistry: $registry));
+        return new self(new BlueprintValidator(
+            assigneeResolverRegistry: $registry,
+            runtimeCapabilityRegistry: self::stage11ACapabilityRegistry(),
+        ));
+    }
+
+    public static function withDependencies(
+        AssigneeResolverRegistry $assigneeResolverRegistry,
+        RuntimeCapabilityRegistry $runtimeCapabilityRegistry,
+        ?ReliableActionHandlerRegistry $reliableActionHandlerRegistry = null,
+    ): self {
+        return new self(new BlueprintValidator(
+            assigneeResolverRegistry: $assigneeResolverRegistry,
+            runtimeCapabilityRegistry: $runtimeCapabilityRegistry,
+            reliableActionHandlerRegistry: $reliableActionHandlerRegistry,
+        ));
     }
 
     /**
@@ -49,5 +69,20 @@ final class WorkflowDefinitionValidator
         if (! $result->isValid()) {
             throw new InvalidWorkflowDefinitionException($result);
         }
+    }
+
+    private static function defaultBlueprintValidator(): BlueprintValidator
+    {
+        return new BlueprintValidator(
+            runtimeCapabilityRegistry: self::stage11ACapabilityRegistry(),
+        );
+    }
+
+    private static function stage11ACapabilityRegistry(): RuntimeCapabilityRegistry
+    {
+        $registry = new RuntimeCapabilityRegistry;
+        $registry->registerStage11DDefaults();
+
+        return $registry;
     }
 }

@@ -152,4 +152,46 @@ final class WorkflowTaskQueryServiceTest extends TestCase
         $this->assertSame(0, $service->countPendingTasksForUser($userId));
         $this->assertSame(0, $service->getPendingTasksForUser($userId)->total());
     }
+
+    #[Test]
+    public function reassignment_moves_actionable_inbox_from_previous_effective_actor_to_target(): void
+    {
+        $fromAssignee = TestUser::query()->create([
+            'name' => 'From Assignee',
+            'email' => 'reassign-from@dbflow.dev',
+        ]);
+
+        $toAssignee = TestUser::query()->create([
+            'name' => 'To Assignee',
+            'email' => 'reassign-to@dbflow.dev',
+        ]);
+
+        $fromUserId = (string) $fromAssignee->getKey();
+        $toUserId = (string) $toAssignee->getKey();
+
+        $this->createMinimalPublishedWorkflow(
+            'reassign_inbox_flow',
+            'Reassign Inbox Flow',
+            $fromUserId,
+        );
+
+        $subject = ContextTestSubject::query()->create(['reference_code' => 'REASSIGN-INBOX-001']);
+        $instance = DBFlow::start('reassign_inbox_flow', $subject, $fromAssignee->getKey());
+        $task = $instance->tasks()->where('status', 'pending')->firstOrFail();
+
+        $service = new WorkflowTaskQueryService;
+
+        $this->assertSame(1, $service->countPendingTasksForUser($fromUserId));
+        $this->assertSame(0, $service->countPendingTasksForUser($toUserId));
+
+        DBFlow::reassign($task, $fromAssignee->getKey(), $toUserId, 'Coverage handover');
+
+        $this->assertSame(0, $service->countPendingTasksForUser($fromUserId));
+        $this->assertSame(1, $service->countPendingTasksForUser($toUserId));
+
+        $pendingForTarget = $service->pendingAssignmentsQueryForUser($toUserId)->get();
+        $this->assertCount(1, $pendingForTarget);
+        $this->assertSame($toUserId, $pendingForTarget->first()?->effectiveAssigneeUserId());
+        $this->assertSame($fromUserId, $pendingForTarget->first()?->originalAssigneeUserId());
+    }
 }

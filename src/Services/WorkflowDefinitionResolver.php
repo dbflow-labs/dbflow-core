@@ -28,7 +28,21 @@ final class WorkflowDefinitionResolver
     public function __construct(
         ?PublishedWorkflowDefinitionResolver $publishedResolver = null,
     ) {
-        $this->publishedResolver = $publishedResolver ?? new PublishedWorkflowDefinitionResolver(
+        if ($publishedResolver !== null) {
+            $this->publishedResolver = $publishedResolver;
+
+            return;
+        }
+
+        if (function_exists('app') && app()->bound(WorkflowDefinitionValidator::class)) {
+            $this->publishedResolver = new PublishedWorkflowDefinitionResolver(
+                app(WorkflowDefinitionValidator::class),
+            );
+
+            return;
+        }
+
+        $this->publishedResolver = new PublishedWorkflowDefinitionResolver(
             new WorkflowDefinitionValidator,
         );
     }

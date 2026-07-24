@@ -3,7 +3,7 @@
 /**
  * Enforce PHPUnit Clover coverage thresholds for DBFlow Core RC gates.
  *
- * Usage: php scripts/check-coverage.php [path/to/coverage.xml]
+ * Usage: php tests/Support/check-coverage.php [path/to/coverage.xml]
  */
 
 declare(strict_types=1);

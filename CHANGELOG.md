@@ -5,12 +5,52 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-23
+
+### Added
+
+- Workflow Context contract and Field Catalog registration (`WorkflowContext`, `FieldDefinition`, `FieldCatalogProvider`).
+- Definition `schema_version` `1.1` additive contract (SLA, reliable actions, webhooks, provenance metadata).
+- Assignment provenance columns on task assignments (`original_assignee_user_id`, `effective_assignee_user_id`, `assignment_source`).
+- Delegation lifecycle (`DBFlow::createDelegation`, `revokeDelegation`, `migratePendingTasksToDelegate` with dry-run).
+- SLA runtime (`WorkflowSlaEvent`, `dbflow:sla-dispatch`, `dbflow:sla-recover`; excludes v1.1 SLA tasks from legacy `dbflow:process-timeouts`).
+- Reliable Action execution ledger (`WorkflowActionExecution`, attempts, `dbflow:actions-dispatch`, `dbflow:actions-recover`).
+- Manual action recovery services (`ManualRetryActionExecution`, `ManualSkipActionExecution`, `CancelActionExecutions::cancelQueuedExecution`).
+- Outbound webhook handler with SSRF/TLS guards, idempotency keys, and host `SecretResolver` contract.
+- Runtime capabilities registry (`RuntimeCapability`, `RuntimeCapabilityRegistry`).
+- `dbflow:diagnostics` command for queue/scheduler readiness signals.
+- Permanent `V10CompatibilityTest` regression suite for v1.0 definition fixtures.
+
+### Changed
+
+- Reassignment hardened for provenance and duplicate-target guards.
+- Actionable inbox and authorization scope: `original_assignee_user_id` on reassignment/escalation rows is audit-only; delegated rows still allow both original (`assignee_user_id`) and effective actors.
+- Concurrent overlapping `CreateDelegation` calls retry InnoDB deadlocks and use consistent `ORDER BY id` lock ordering so losers observe overlap instead of surfacing raw deadlock errors.
+- **Requires Laravel 13** (`illuminate/*` `^13.0`).
+
+### Database
+
+- Additive migrations only (delegations, SLA events, action executions/attempts, assignment provenance, task SLA fields). No historical row fabrication.
+
+### Upgrade notes
+
+- From `1.0.x`: see [UPGRADE-1.1.md](UPGRADE-1.1.md) (`composer require dbflowlabs/core:^1.1`, migrate, register scheduler commands).
+- v1.0 definitions remain valid without automatic `schema_version` injection.
+- Pair with `dbflowlabs/filament:^1.1` and optional `dbflowlabs/filament-pro:^1.1`.
+- Release notes: [RELEASE-NOTES-1.1.0.md](RELEASE-NOTES-1.1.0.md).
+
+### Known limitations
+
+- MySQL/PostgreSQL concurrency proofs are host-operational (not enforced in package SQLite CI).
+- Webhook delivery is not externally exactly-once.
+- `live_context` evaluation remains disabled.
+
 ## [1.0.0] - 2026-07-07
 
 ### Added
 
 - `ActionFailed` Laravel event and `WorkflowLogEvent::ActionFailed` audit entry when an action node handler throws.
-- `ActionExecutionFailedException` and optional action node `fail_on_exception` to abort traversal instead of fire-and-forget logging.
+- `ActionExecutionFailedException` and optional action node `stop_on_error` to abort traversal instead of fire-and-forget logging.
 - Sequential approval/rejection edge-case coverage and stricter expression evaluation for condition routing.
 
 ### Changed

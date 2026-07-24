@@ -25,6 +25,8 @@ use DbflowLabs\Core\Events\WorkflowCancelled;
 use DbflowLabs\Core\Models\WorkflowInstance;
 use DbflowLabs\Core\Models\WorkflowTask;
 use DbflowLabs\Core\Models\WorkflowTaskAssignment;
+use DbflowLabs\Core\Services\Actions\CancelActionExecutions;
+use DbflowLabs\Core\Services\Sla\CancelTaskSlaEvents;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
 use DbflowLabs\Core\Services\WorkflowLogger;
 use DbflowLabs\Core\Support\ResolvesActorUserId;
@@ -38,6 +40,8 @@ final class CancelWorkflow
 
     public function __construct(
         private readonly WorkflowLogger $logger,
+        private readonly CancelTaskSlaEvents $cancelTaskSlaEvents,
+        private readonly CancelActionExecutions $cancelActionExecutions,
         private readonly ?WorkflowHooksRegistry $hooksRegistry = null,
     ) {}
 
@@ -50,12 +54,6 @@ final class CancelWorkflow
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Intentional silent no-op on an already-terminal instance: cancel() is part of the
-            // frozen 1.0 public API (see docs/integration/filament.md), so this idempotent
-            // behavior cannot change without a breaking release. Hosts that need to distinguish
-            // "cancelled now" from "was already terminal" should check
-            // $instance->status->isTerminal() before calling cancel(). See README "Cancel a
-            // Running Workflow" section.
             if ($lockedInstance->status?->isTerminal() ?? false) {
                 return $lockedInstance->refresh();
             }
@@ -88,6 +86,8 @@ final class CancelWorkflow
                     ]);
 
                 foreach ($pendingTasks as $pendingTask) {
+                    $this->cancelTaskSlaEvents->cancelForTask($pendingTask, 'workflow_cancelled');
+
                     $this->logger->log(
                         $lockedInstance,
                         WorkflowLogEvent::TaskCancelled,
@@ -97,6 +97,8 @@ final class CancelWorkflow
                     );
                 }
             }
+
+            $this->cancelActionExecutions->cancelForInstance($lockedInstance, 'workflow_cancelled');
 
             $lockedInstance->forceFill([
                 'status' => WorkflowInstanceStatus::Cancelled,

@@ -13,7 +13,7 @@ DBFlow Core lets you add approval workflows, tasks, transitions, rejection flows
 It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific business adapters, Filament UI packages, and the visual workflow Builder are distributed separately.
 
 > [!NOTE]
-> DBFlow Core **1.0.0** is the first stable release. The runtime public API is frozen; see [API stability](#api-stability) and [UPGRADE-1.0.md](UPGRADE-1.0.md).
+> DBFlow Core **1.1.0** extends the stable 1.0 runtime with additive contracts (context, delegation, SLA, reliable actions, outbound webhooks). See [API stability](#api-stability), [UPGRADE-1.1.md](UPGRADE-1.1.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ## Contents
 
@@ -45,7 +45,7 @@ It is the open-source runtime foundation of the DBFlow ecosystem. Host-specific 
 | **License** | [MIT](LICENSE) |
 | **Repository** | [github.com/dbflow-labs/dbflow-core](https://github.com/dbflow-labs/dbflow-core) |
 | **Default branch** | `main` |
-| **Stability** | `Stable (1.0.0)` |
+| **Stability** | `Stable (1.1.0)` |
 | **Author** | Baron Wang <hello@dbflow.dev> |
 | **Documentation** | [dbflow.dev/docs](https://dbflow.dev/docs) |
 | **Laravel compatibility** | `13.x` |
@@ -63,7 +63,12 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 - **Transition handling** — controlled movement between workflow nodes.
 - **Append-only audit logs** — historical workflow activity records for traceability.
 - **Action node failure handling** — `ActionFailed` events and audit entries when handlers throw; optional `stop_on_error` to abort traversal.
-- **Extension points** — assignee resolvers, workflow hooks, condition handling, and action handlers.
+- **Workflow Context** — additive context contract and field catalog for definition validation and runtime reads.
+- **Delegation** — time-bounded delegation rules, effective-assignee resolution, and pending-task migration.
+- **SLA runtime** — fixed-duration policies with reminders, overdue handling, escalation, and queue recovery.
+- **Reliable actions** — persisted action executions with blocking/non-blocking modes, retry/skip, and recovery commands.
+- **Outbound webhooks** — SSRF/TLS guards, HMAC signing, idempotency keys, and host secret resolution.
+- **Extension points** — assignee resolvers, workflow hooks, condition handling, action handlers, and runtime capability gates.
 
 > [!NOTE]
 > Core focuses entirely on the workflow runtime engine. It contains no frontend assets, Filament resources, visual canvas, or host-specific business models.
@@ -72,7 +77,9 @@ DBFlow Core provides the runtime foundation required for deterministic, schema-d
 
 - PHP `^8.3`
 - Laravel `13.x` / Illuminate `^13.0` components
-- SQLite, MySQL, or PostgreSQL
+- **MySQL `8.0` or later** (production and certification target)
+- SQLite (supported for development and package tests only)
+- PostgreSQL is not part of the v1.1 stable certification matrix unless separately certified for your deployment
 - A host user model, usually `App\Models\User`
 - A user table (or equivalent) for actor and assignee references; UUID/ULID primary keys are supported in v0.3+
 
@@ -87,8 +94,10 @@ composer require dbflowlabs/core
 Releases are tagged on GitHub, for example:
 
 ```text
-v1.0.0
+v1.1.0
 ```
+
+Hosts on `1.0.x` can upgrade with `composer require dbflowlabs/core:^1.1` — see [UPGRADE-1.1.md](UPGRADE-1.1.md).
 
 ## Laravel Integration
 
@@ -152,8 +161,11 @@ return [
         'strict' => env('DBFLOW_EXPRESSION_STRICT', false),
     ],
     'visual_builder_enabled' => env('DBFLOW_VISUAL_BUILDER_ENABLED', false),
+    // Plus v1.1 sections: reassignment, delegation, sla, actions, webhook
 ];
 ```
+
+v1.1 configuration keys are documented in [`docs/reference/v1.1-configuration.md`](docs/reference/v1.1-configuration.md).
 
 **Host example** — typical Laravel app after publish (you may add `env()` fallbacks in *your* copy only):
 
@@ -180,7 +192,7 @@ DBFLOW_EXPRESSION_STRICT=false
 `ConfigUserResolver` supports integer and string primary keys at runtime. User references are stored as strings in `dbflow_*` tables.
 
 > [!NOTE]
-> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` / `reassign()` throw `WorkflowNotAvailableException`, `dbflow:process-timeouts` fails, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
+> Set `DBFLOW_ENABLED=false` to disable the workflow **runtime**. When disabled, `DBFlow::start()` / `approve()` / `reject()` / `cancel()` / `reassign()` / delegation APIs throw `WorkflowNotAvailableException`, timeout/SLA/action artisan commands that require the runtime fail, and runtime action bindings (`StartWorkflow`, etc.) are not registered. Definition-management bindings remain available (`registerDefinitionProvider`, `registerAssigneeResolver`, etc.), migrations still load, and `php artisan dbflow:sync` / `dbflow:validate` remain registered so hosts can sync or validate definitions before re-enabling.
 
 ## Minimal Usage
 
@@ -244,10 +256,16 @@ Validate definitions in CI:
 php artisan dbflow:validate --strict
 ```
 
-Process overdue approval tasks (schedule via cron, for example every 5 minutes):
+Process overdue approval tasks on the **legacy timeout** path (schedule via cron, for example every minute):
 
 ```bash
 php artisan dbflow:process-timeouts
+```
+
+When using v1.1 SLA and reliable actions, also schedule dispatch/recover commands and run a queue worker — see [`docs/operations/queue-and-scheduler.md`](docs/operations/queue-and-scheduler.md). Check readiness with:
+
+```bash
+php artisan dbflow:diagnostics
 ```
 
 Alternative for interactive or UI-owned workflows: `CreateWorkflowDraft` → `PublishWorkflowDraft` (see package actions and Filament packages).
@@ -409,9 +427,29 @@ DBFlow::reassign(
 - **Does not enforce admin/delegate policies.** Host must authorize who may reassign before calling `reassign()`.
 - **Does not support add-sign / delegate-to-multiple.** Only one assignment is replaced per call.
 
-### 8. Task Timeouts
+### 8. Delegation (v1.1)
 
-Approval nodes may declare an optional timeout in workflow definition `config`:
+Create a time-bounded delegation rule, then optionally migrate matching pending tasks:
+
+```php
+$delegation = DBFlow::createDelegation(
+    $delegator,
+    $delegate,
+    now(),
+    now()->addDays(7),
+    auth()->user(),
+    workflowKey: 'refund_approval',
+);
+
+DBFlow::migratePendingTasksToDelegate($delegation, auth()->user(), dryRun: true);
+DBFlow::revokeDelegation($delegation, auth()->user());
+```
+
+See [`docs/architecture/reassignment-and-delegation.md`](docs/architecture/reassignment-and-delegation.md).
+
+### 9. Task Timeouts and SLA (v1.1)
+
+**Legacy timeout** (v1.0 path) — approval nodes may declare:
 
 ```json
 {
@@ -423,26 +461,17 @@ Approval nodes may declare an optional timeout in workflow definition `config`:
 ```
 
 - `due_in` — ISO 8601 duration (for example `PT24H`, `P3D`). When a task is created, Core writes `workflow_tasks.due_at`.
-- `on_timeout` — optional. Only `reject_end` is supported in the MVP. When omitted, overdue tasks are **logged only** and remain `pending` (assignees may still approve manually).
+- `on_timeout` — optional. Only `reject_end` is supported on this path. When omitted, overdue tasks are **logged only** and remain `pending`.
 
-Schedule the command:
+Schedule:
 
 ```bash
 php artisan dbflow:process-timeouts
 ```
 
-**What Core does:**
+**v1.1 SLA** extends approvals with reminders, overdue notifications, and escalation via persisted `WorkflowSlaEvent` rows (`dbflow:sla-dispatch` / `dbflow:sla-recover`). Tasks on the v1.1 SLA path are excluded from `dbflow:process-timeouts`. See [`docs/architecture/sla-runtime.md`](docs/architecture/sla-runtime.md).
 
-- Writes `WorkflowLogEvent::TaskTimedOut` once per overdue task and dispatches `TaskTimedOut`
-- When `on_timeout: reject_end`, auto-rejects with `RejectStrategy::End` (system actor is `null` in audit logs)
-
-**What Core does *not* do:**
-
-- No reminders before due date
-- No escalation chains or `auto_approve`
-- No silent auto-reject when `on_timeout` is omitted
-
-### 9. Query Workflow State on Models
+### 10. Query Workflow State on Models
 
 Models using `HasWorkflow` can inspect runtime state without raw SQL:
 
@@ -455,7 +484,7 @@ $order->workflowLogs('refund_approval');
 
 Use these helpers in host guards (for example, disable a Filament **Confirm** action while `hasRunningWorkflow()` is true).
 
-### 10. Action Node Failures
+### 11. Action Node Failures
 
 Action nodes execute registered `ActionHandler` implementations during traversal. When a handler throws:
 
@@ -493,13 +522,16 @@ Use `DbflowLabs\Core\DBFlow` as the single runtime entry point for workflow oper
 | `approve($task, $actor = null, $comment = null)` | Approve a pending task | `WorkflowInstance` |
 | `reject($task, $actor = null, $comment = null, $strategy, $targetNodeKey = null)` | Reject a pending task | `WorkflowInstance` |
 | `cancel($instance, $actor = null, $comment = null)` | Cancel a running instance | `WorkflowInstance` |
-| `reassign($task, $fromActor, $toUserId, $comment = null)` | Reassign a pending assignment to another user | `WorkflowInstance` |
+| `reassign($task, $fromActor, $toUserId, $comment = null, $idempotencyKey = null, $assignmentId = null)` | Reassign a pending assignment to another user | `WorkflowInstance` |
+| `createDelegation(...)` | Create a time-bounded delegation rule | `WorkflowDelegation` |
+| `revokeDelegation($delegation, $revokedBy = null, $reason = null)` | Revoke an active delegation | `WorkflowDelegation` |
+| `migratePendingTasksToDelegate($delegation, ...)` | Migrate matching pending tasks to the delegate | `array` |
 | `registerDefinitionProvider($registry, $provider)` | Boot-time code definition registration | `void` |
 | `registerAssigneeResolver($registry, $key, $resolver)` | Boot-time assignee resolver registration | `void` |
 | `registerWorkflowHooks($registry, $workflowKey, $hooks)` | Boot-time lifecycle hooks | `void` |
 | `registerTaskHooks($registry, $workflowKey, $hooks)` | Boot-time task-level hooks | `void` |
 
-Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel` / `reassign`) are usually called from host services, controllers, or UI actions.
+Registration helpers are usually called from a host service provider. Runtime actions (`start` / `approve` / `reject` / `cancel` / `reassign` / delegation APIs) are usually called from host services, controllers, or UI actions.
 
 ## Assignee Types (Runtime)
 
@@ -623,7 +655,15 @@ Cross-package contracts for pending-task queries, runtime actions, events, and v
 - [`docs/integration/filament.md`](docs/integration/filament.md) — public API surface for `dbflowlabs/filament` integrators
 - [`docs/integration/acceptance-checklist.md`](docs/integration/acceptance-checklist.md) — release verification checklist
 
-Target version pairing: `dbflowlabs/filament` `^1.0` requires `dbflowlabs/core` `^1.0`.
+Target version pairing for **1.1**:
+
+| Package | Constraint |
+| --- | --- |
+| `dbflowlabs/core` | `^1.1` |
+| `dbflowlabs/filament` | `^1.1` (requires core `^1.1`) |
+| `dbflowlabs/filament-pro` | `^1.1` (optional; requires core + filament `^1.1`) |
+
+Hosts remaining on the 1.0 UI packages should stay on `dbflowlabs/core:^1.0` until Filament/Pro are upgraded together.
 
 **Choosing a UI path:**
 
@@ -655,7 +695,7 @@ The CI pipeline validates the package against PHP 8.3 and 8.4 with PHPUnit, PHPS
 
 ## API stability
 
-From `1.0.0`, these surfaces are frozen until the next major release:
+From `1.0.0`, these surfaces remain frozen until the next major release:
 
 - `DBFlow::start()`, `approve()`, `reject()`, `cancel()`, `reassign()`
 - `DBFlow::register*` boot-time registration methods
@@ -663,15 +703,23 @@ From `1.0.0`, these surfaces are frozen until the next major release:
 - `WorkflowTaskQueryService` public query API (see `docs/integration/filament.md`)
 - `DbflowLabs\Core\Events\*` event constructor properties
 
+**Additive in `1.1.0`** (compatible with the 1.0 freeze; new public methods and events):
+
+- `DBFlow::createDelegation()`, `revokeDelegation()`, `migratePendingTasksToDelegate()`
+- Assignment provenance fields, SLA / reliable-action / webhook contracts documented under `docs/`
+- Runtime capability gates (`RuntimeCapability`, `RuntimeCapabilityRegistry`)
+
 Draft and builder management actions are marked `@internal` and are not covered by the stability guarantee. Use artisan commands or the Filament Builder package instead of binding those classes directly.
 
-Automated contract tests: `EcosystemContractTest`, `PublicApiContractTest`.
+Automated contract tests: `EcosystemContractTest`, `PublicApiContractTest`, `V10CompatibilityTest`.
 
 ## Versioning
 
-DBFlow Core **1.0.0** is the first stable semver release.
+DBFlow Core **1.1.0** is the current stable release (built on the frozen 1.0 public API).
 
-- Review [UPGRADE-1.0.md](UPGRADE-1.0.md) and [CHANGELOG.md](CHANGELOG.md) before upgrading from `0.x` or RC tags
+- From `1.0.x`: follow [UPGRADE-1.1.md](UPGRADE-1.1.md)
+- From `0.x` or RC tags: follow [UPGRADE-1.0.md](UPGRADE-1.0.md), then [UPGRADE-1.1.md](UPGRADE-1.1.md)
+- Review [CHANGELOG.md](CHANGELOG.md) before upgrading
 - Test workflow definitions and runtime transitions in a staging environment after upgrades
 - Avoid relying on `@internal` definition-management actions
 

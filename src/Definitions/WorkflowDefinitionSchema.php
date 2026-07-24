@@ -93,6 +93,26 @@ final class WorkflowDefinitionSchema
 
     public const CONFIG_STATUS = 'status';
 
+    public const CONFIG_REASSIGNMENT = 'reassignment';
+
+    public const CONFIG_DELEGATION = 'delegation';
+
+    public const CONFIG_ENABLED = 'enabled';
+
+    public const CONFIG_EXECUTION_MODE = 'execution_mode';
+
+    public const CONFIG_ALLOW_MANUAL_SKIP = 'allow_manual_skip';
+
+    public const CONFIG_MAX_ATTEMPTS = 'max_attempts';
+
+    public const CONFIG_RETRY = 'retry';
+
+    public const CONFIG_ACTION_TIMEOUT = 'timeout_seconds';
+
+    public const FIELD_CONTEXT_POLICY = 'context_policy';
+
+    public const CONTEXT_POLICY_DATA_SOURCE = 'data_source';
+
     public const ASSIGNEE_FIELD_TYPE = 'type';
 
     public const ASSIGNEE_FIELD_VALUE = 'value';
@@ -102,6 +122,44 @@ final class WorkflowDefinitionSchema
     public const TIMEOUT_DUE_IN = 'due_in';
 
     public const TIMEOUT_ON_TIMEOUT = 'on_timeout';
+
+    public const CONFIG_SLA = 'sla';
+
+    public const SLA_DUE_AFTER = 'due_after';
+
+    public const SLA_REMINDERS = 'reminders';
+
+    public const SLA_BEFORE_DUE = 'before_due';
+
+    public const SLA_CHANNEL = 'channel';
+
+    public const SLA_TEMPLATE = 'template';
+
+    public const SLA_SEQUENCE = 'sequence';
+
+    public const SLA_METADATA = 'metadata';
+
+    public const SLA_OVERDUE = 'overdue';
+
+    public const SLA_NOTIFY = 'notify';
+
+    public const SLA_ESCALATION = 'escalation';
+
+    public const SLA_TYPE = 'type';
+
+    public const SLA_TARGET = 'target';
+
+    public const SLA_HANDLER = 'handler';
+
+    public const SLA_RETRY = 'retry';
+
+    public const SLA_MAX_ATTEMPTS = 'max_attempts';
+
+    public const SLA_BACKOFF_SECONDS = 'backoff_seconds';
+
+    public const SLA_RESOLVER = 'resolver';
+
+    public const SLA_VALUE = 'value';
 
     public const KEY_PATTERN = '/^[a-z0-9_]+$/';
 

@@ -19,22 +19,68 @@ namespace DbflowLabs\Core\Providers;
 
 use DbflowLabs\Core\Actions\LocalStatusUpdateHandler;
 use DbflowLabs\Core\Actions\LogActionHandler;
+use DbflowLabs\Core\Actions\Webhook\OutboundWebhookHandler;
+use DbflowLabs\Core\Actions\Webhook\Redactor;
+use DbflowLabs\Core\Actions\Webhook\SafeTemplateRenderer;
+use DbflowLabs\Core\Actions\Webhook\LaravelWebhookHttpTransport;
+use DbflowLabs\Core\Actions\Webhook\NativeDnsResolver;
+use DbflowLabs\Core\Actions\Webhook\SsrfGuard;
+use DbflowLabs\Core\Actions\Webhook\SystemClock;
+use DbflowLabs\Core\Actions\Webhook\WebhookHeaderValidator;
+use DbflowLabs\Core\Actions\Webhook\WebhookRedirectPolicy;
+use DbflowLabs\Core\Actions\Webhook\WebhookRequestSigner;
 use DbflowLabs\Core\Actions\ApproveTask;
 use DbflowLabs\Core\Actions\CancelWorkflow;
+use DbflowLabs\Core\Actions\Delegation\CreateDelegation;
+use DbflowLabs\Core\Actions\Delegation\RevokeDelegation;
 use DbflowLabs\Core\Actions\RejectTask;
 use DbflowLabs\Core\Actions\ProcessTaskTimeouts;
 use DbflowLabs\Core\Actions\ReassignTask;
 use DbflowLabs\Core\Actions\StartWorkflow;
 use DbflowLabs\Core\Actions\SyncWorkflowDefinitions;
+use DbflowLabs\Core\Capabilities\RuntimeCapabilityRegistry;
+use DbflowLabs\Core\Context\ContextPathResolver;
+use DbflowLabs\Core\Context\WorkflowContextNormalizer;
+use DbflowLabs\Core\Console\Commands\ActionsDispatchCommand;
+use DbflowLabs\Core\Console\Commands\ActionsRecoverCommand;
+use DbflowLabs\Core\Console\Commands\DiagnosticsCommand;
 use DbflowLabs\Core\Console\Commands\ProcessTaskTimeoutsCommand;
+use DbflowLabs\Core\Console\Commands\SlaDispatchCommand;
+use DbflowLabs\Core\Console\Commands\SlaRecoverCommand;
 use DbflowLabs\Core\Console\Commands\SyncWorkflowDefinitionsCommand;
 use DbflowLabs\Core\Console\Commands\ValidateWorkflowDefinitionsCommand;
 use DbflowLabs\Core\Contracts\UserResolver;
 use DbflowLabs\Core\DBFlow;
+use DbflowLabs\Core\Delegation\DelegationCycleDetector;
+use DbflowLabs\Core\Delegation\ResolveEffectiveAssignee;
 use DbflowLabs\Core\Services\AssigneeResolverRegistry;
+use DbflowLabs\Core\Services\AssignmentMaterializer;
 use DbflowLabs\Core\Services\ExpressionEvaluator;
+use DbflowLabs\Core\Services\MigratePendingTasksToDelegate;
+use DbflowLabs\Core\Contracts\Actions\WorkflowSecretResolver;
+use DbflowLabs\Core\Services\Actions\ActionExecutionInitializer;
+use DbflowLabs\Core\Services\Actions\ActionVisitIdentityAllocator;
+use DbflowLabs\Core\Services\Actions\AdvanceWorkflowFromAction;
+use DbflowLabs\Core\Services\Actions\CancelActionExecutions;
+use DbflowLabs\Core\Services\Actions\DispatchActionExecutions;
+use DbflowLabs\Core\Services\Actions\ManualRetryActionExecution;
+use DbflowLabs\Core\Services\Actions\ManualSkipActionExecution;
+use DbflowLabs\Core\Services\Actions\ProcessActionExecution;
+use DbflowLabs\Core\Services\Actions\RecoverStaleActionExecutions;
+use DbflowLabs\Core\Services\Actions\ReliableActionHandlerRegistry;
+use DbflowLabs\Core\Services\Diagnostics\RuntimeDiagnostics;
+use DbflowLabs\Core\Services\Sla\CancelTaskSlaEvents;
+use DbflowLabs\Core\Services\Sla\DispatchSlaEvents;
+use DbflowLabs\Core\Services\Sla\ProcessSlaEvent;
+use DbflowLabs\Core\Services\Sla\RecoverStaleSlaEvents;
+use DbflowLabs\Core\Services\Sla\SlaEscalationHandlerRegistry;
+use DbflowLabs\Core\Services\Sla\SlaEscalationTargetResolver;
+use DbflowLabs\Core\Services\Sla\SlaEventMaterializer;
+use DbflowLabs\Core\Services\Sla\SlaNotificationHandlerRegistry;
+use DbflowLabs\Core\Services\Sla\TaskSlaInitializer;
 use DbflowLabs\Core\Services\TaskHooksRegistry;
 use DbflowLabs\Core\Services\TransitionResolver;
+use DbflowLabs\Core\Resolvers\PublishedWorkflowDefinitionResolver;
 use DbflowLabs\Core\Services\WorkflowDefinitionRegistry;
 use DbflowLabs\Core\Services\WorkflowDefinitionResolver;
 use DbflowLabs\Core\Services\WorkflowHooksRegistry;
@@ -75,6 +121,11 @@ final class DBFlowServiceProvider extends ServiceProvider
                 SyncWorkflowDefinitionsCommand::class,
                 ValidateWorkflowDefinitionsCommand::class,
                 ProcessTaskTimeoutsCommand::class,
+                SlaDispatchCommand::class,
+                SlaRecoverCommand::class,
+                ActionsDispatchCommand::class,
+                ActionsRecoverCommand::class,
+                DiagnosticsCommand::class,
             ]);
 
             $this->publishes([
@@ -133,8 +184,46 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
+            RuntimeCapabilityRegistry::class,
+            static function (): RuntimeCapabilityRegistry {
+                $registry = new RuntimeCapabilityRegistry;
+                $registry->registerStage11DWebhookDefaults();
+
+                return $registry;
+            },
+        );
+
+        $this->app->singleton(ReliableActionHandlerRegistry::class, function ($app): ReliableActionHandlerRegistry {
+            $registry = new ReliableActionHandlerRegistry;
+            $this->registerOutboundWebhookHandler($registry, $app);
+
+            return $registry;
+        });
+
+        $this->app->singleton(WorkflowContextNormalizer::class);
+        $this->app->singleton(ContextPathResolver::class);
+
+        $this->app->singleton(
             WorkflowDefinitionValidator::class,
-            static fn (): WorkflowDefinitionValidator => new WorkflowDefinitionValidator,
+            fn ($app): WorkflowDefinitionValidator => WorkflowDefinitionValidator::withDependencies(
+                $app->make(AssigneeResolverRegistry::class),
+                $app->make(RuntimeCapabilityRegistry::class),
+                $app->make(ReliableActionHandlerRegistry::class),
+            ),
+        );
+
+        $this->app->singleton(
+            PublishedWorkflowDefinitionResolver::class,
+            fn ($app): PublishedWorkflowDefinitionResolver => new PublishedWorkflowDefinitionResolver(
+                $app->make(WorkflowDefinitionValidator::class),
+            ),
+        );
+
+        $this->app->singleton(
+            WorkflowDefinitionResolver::class,
+            fn ($app): WorkflowDefinitionResolver => new WorkflowDefinitionResolver(
+                $app->make(PublishedWorkflowDefinitionResolver::class),
+            ),
         );
 
         $this->app->singleton(
@@ -190,11 +279,58 @@ final class DBFlowServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(
+            ResolveEffectiveAssignee::class,
+            static fn (): ResolveEffectiveAssignee => new ResolveEffectiveAssignee,
+        );
+
+        $this->app->singleton(
+            DelegationCycleDetector::class,
+            static fn (): DelegationCycleDetector => new DelegationCycleDetector(
+                (int) config('dbflow.delegation.max_cycle_depth', 16),
+            ),
+        );
+
+        $this->app->singleton(
+            AssignmentMaterializer::class,
+            fn ($app): AssignmentMaterializer => new AssignmentMaterializer(
+                $app->make(ResolveEffectiveAssignee::class),
+                $app->make(WorkflowLogger::class),
+            ),
+        );
+
+        $this->app->singleton(SlaNotificationHandlerRegistry::class);
+        $this->app->singleton(SlaEscalationHandlerRegistry::class);
+        $this->app->singleton(SlaEventMaterializer::class);
+        $this->app->singleton(TaskSlaInitializer::class);
+        $this->app->singleton(CancelTaskSlaEvents::class);
+        $this->app->singleton(DispatchSlaEvents::class);
+        $this->app->singleton(ProcessSlaEvent::class);
+        $this->app->singleton(RecoverStaleSlaEvents::class);
+        $this->app->singleton(SlaEscalationTargetResolver::class);
+
+        $this->app->singleton(ActionVisitIdentityAllocator::class);
+        $this->app->singleton(ActionExecutionInitializer::class);
+        $this->app->singleton(DispatchActionExecutions::class);
+        $this->app->singleton(CancelActionExecutions::class);
+        $this->app->singleton(RecoverStaleActionExecutions::class);
+        $this->app->singleton(AdvanceWorkflowFromAction::class);
+        $this->app->singleton(ProcessActionExecution::class);
+        $this->app->singleton(ManualRetryActionExecution::class);
+        $this->app->singleton(ManualSkipActionExecution::class);
+        $this->app->singleton(RuntimeDiagnostics::class);
+
+        $this->app->singleton(CreateDelegation::class);
+        $this->app->singleton(RevokeDelegation::class);
+
+        $this->app->singleton(
             WorkflowNodeTraverser::class,
             fn ($app): WorkflowNodeTraverser => new WorkflowNodeTraverser(
                 $app->make(TransitionResolver::class),
                 $app->make(ActionManager::class),
                 $app->make(WorkflowLogger::class),
+                $app->make(ActionExecutionInitializer::class),
+                $app->make(DispatchActionExecutions::class),
+                $app->make(ReliableActionHandlerRegistry::class),
             ),
         );
 
@@ -207,6 +343,8 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
+                $app->make(AssignmentMaterializer::class),
+                $app->make(TaskSlaInitializer::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),
             ),
@@ -220,6 +358,9 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
+                $app->make(AssignmentMaterializer::class),
+                $app->make(TaskSlaInitializer::class),
+                $app->make(CancelTaskSlaEvents::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),
             ),
@@ -232,6 +373,9 @@ final class DBFlowServiceProvider extends ServiceProvider
                 $app->make(ApprovalNodeAssigneeResolver::class),
                 $app->make(TimeoutDueAtResolver::class),
                 $app->make(WorkflowLogger::class),
+                $app->make(AssignmentMaterializer::class),
+                $app->make(TaskSlaInitializer::class),
+                $app->make(CancelTaskSlaEvents::class),
                 $app->make(WorkflowHooksRegistry::class),
                 $app->make(TaskHooksRegistry::class),
             ),
@@ -241,6 +385,8 @@ final class DBFlowServiceProvider extends ServiceProvider
             CancelWorkflow::class,
             fn ($app): CancelWorkflow => new CancelWorkflow(
                 $app->make(WorkflowLogger::class),
+                $app->make(CancelTaskSlaEvents::class),
+                $app->make(CancelActionExecutions::class),
                 $app->make(WorkflowHooksRegistry::class),
             ),
         );
@@ -250,6 +396,13 @@ final class DBFlowServiceProvider extends ServiceProvider
             fn ($app): ReassignTask => new ReassignTask(
                 $app->make(WorkflowLogger::class),
                 $app->make(TaskHooksRegistry::class),
+            ),
+        );
+
+        $this->app->singleton(
+            MigratePendingTasksToDelegate::class,
+            fn ($app): MigratePendingTasksToDelegate => new MigratePendingTasksToDelegate(
+                $app->make(ReassignTask::class),
             ),
         );
 
@@ -268,5 +421,34 @@ final class DBFlowServiceProvider extends ServiceProvider
 
         $actions->register('log', LogActionHandler::class);
         $actions->register('local_status_update', LocalStatusUpdateHandler::class);
+    }
+
+    private function registerOutboundWebhookHandler(ReliableActionHandlerRegistry $registry, $app): void
+    {
+        $ssrfGuard = new SsrfGuard(
+            denyPrivateIps: (bool) config('dbflow.webhook.deny_private_ips', true),
+            allowedSchemes: config('dbflow.webhook.allowed_schemes', ['https', 'http']),
+            dnsResolver: new NativeDnsResolver,
+            requireHttps: (bool) config('dbflow.webhook.require_https', false),
+            hostAllowlist: config('dbflow.webhook.host_allowlist', []),
+        );
+
+        $registry->register('outbound_webhook', new OutboundWebhookHandler(
+            new SafeTemplateRenderer,
+            new Redactor,
+            $ssrfGuard,
+            new WebhookHeaderValidator,
+            new WebhookRequestSigner,
+            new WebhookRedirectPolicy(
+                $ssrfGuard,
+                (bool) config('dbflow.webhook.follow_redirects', false),
+                (int) config('dbflow.webhook.max_redirects', 3),
+            ),
+            new LaravelWebhookHttpTransport,
+            new SystemClock,
+            $app->bound(WorkflowSecretResolver::class)
+                ? $app->make(WorkflowSecretResolver::class)
+                : null,
+        ));
     }
 }

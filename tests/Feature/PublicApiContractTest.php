@@ -87,7 +87,7 @@ final class PublicApiContractTest extends TestCase
         $this->assertSame([
             'approve' => 'approve:'.WorkflowTask::class.':mixed:?string:'.WorkflowInstance::class,
             'cancel' => 'cancel:'.WorkflowInstance::class.':mixed:?string:'.WorkflowInstance::class,
-            'reassign' => 'reassign:'.WorkflowTask::class.':mixed:string:?string:'.WorkflowInstance::class,
+            'reassign' => 'reassign:'.WorkflowTask::class.':mixed:string:?string:?string:mixed:'.WorkflowInstance::class,
             'reject' => 'reject:'.WorkflowTask::class.':mixed:?string:'.RejectStrategy::class.':?string:'.WorkflowInstance::class,
             'start' => 'start:string:'.Model::class.':mixed:array:'.WorkflowInstance::class,
         ], $signatures);
