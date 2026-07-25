@@ -7,16 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-25
+
 ### Security
 
 - Pinned external GitHub Actions to immutable full commit SHAs.
 - Added Composer dependency security auditing to CI.
 - Added a public vulnerability reporting policy.
 - Removed the temporary Symfony Cache advisory exception after resolving the affected dependency to a secure, host-compatible release.
+- Updated vulnerable Guzzle dependencies to secure releases.
 
 ### Changed
 
-- Excluded development-only files from exported package archives.
+- Excluded `composer.lock` and other development-only files from exported package archives.
 - Added automated validation of release archive contents.
 - Added Dependabot maintenance for Composer and GitHub Actions.
 
@@ -265,6 +268,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - If you previously set `DBFLOW_ENABLED=false` but still called runtime APIs, expect `WorkflowNotAvailableException` after upgrading.
 - Replace imports of `Services\WorkflowDefinitionValidator` with `Validation\WorkflowDefinitionValidator`.
 
+[Unreleased]: https://github.com/dbflow-labs/dbflow-core/compare/1.1.1...HEAD
+[1.1.1]: https://github.com/dbflow-labs/dbflow-core/compare/1.1.0...1.1.1
 [1.0.0]: https://github.com/dbflow-labs/dbflow-core/compare/1.0.0-rc.1...1.0.0
 [1.0.0-rc.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.9.0-beta.1...1.0.0-rc.1
 [0.9.0-beta.1]: https://github.com/dbflow-labs/dbflow-core/compare/0.5.0-alpha.1...0.9.0-beta.1
