@@ -54,13 +54,6 @@
   },
   "minimum-stability": "stable",
   "prefer-stable": true,
-  "config": {
-    "audit": {
-      "ignore": {
-        "PKSA-z7t6-zt6p-wtng": "Temporary bypass for symfony/cache advisory to unlock symfony/expression-language ^7.0 for Laravel 13 workflow runtime compatibility."
-      }
-    }
-  },
   "repositories": [{
     "name": "packagist",
     "type": "composer",

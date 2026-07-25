@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Pinned external GitHub Actions to immutable full commit SHAs.
+- Added Composer dependency security auditing to CI.
+- Added a public vulnerability reporting policy.
+- Removed the temporary Symfony Cache advisory exception after resolving the affected dependency to a secure, host-compatible release.
+
+### Changed
+
+- Excluded development-only files from exported package archives.
+- Added automated validation of release archive contents.
+- Added Dependabot maintenance for Composer and GitHub Actions.
+
 ## [1.1.0] - 2026-07-23
 
 ### Added
